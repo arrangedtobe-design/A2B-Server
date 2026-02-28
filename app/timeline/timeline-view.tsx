@@ -481,7 +481,11 @@ export default function TimelineView({ userId }: { userId: string }) {
           {CATEGORIES.map(cat => { const c = items.filter(i => i.category === cat).length; if (!c) return null; return <button key={cat} onClick={() => setFilterCategory(cat)} className={"px-3 py-1 rounded-full text-sm flex items-center gap-1 " + (filterCategory === cat ? "bg-gray-800 text-white" : "bg-white text-gray-600 border")}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }}></span>{cat} ({c})</button>; })}
         </div>
 
-        {showForm && renderForm()}
+        {showForm && (
+          <div className="lg:hidden fixed inset-0 bg-gray-50 z-50 overflow-y-auto p-4">
+            {renderForm()}
+          </div>
+        )}
 
         <div className="flex gap-6">
           <div className="flex-1 min-w-0">
@@ -587,8 +591,10 @@ export default function TimelineView({ userId }: { userId: string }) {
               </div>
             )}
           </div>
-          {selectedItem && (
-            <div className="hidden lg:block w-[340px] shrink-0 sticky top-6 self-start">{renderDetailPanel()}</div>
+          {(showForm || selectedItem) && (
+            <div className="hidden lg:block w-[340px] shrink-0 sticky top-6 self-start">
+              {showForm ? renderForm() : renderDetailPanel()}
+            </div>
           )}
         </div>
 
