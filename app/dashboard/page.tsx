@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+
 
 export default function Dashboard() {
   const [event, setEvent] = useState<any>(null);
@@ -101,7 +101,6 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex gap-2 items-center">
-            <ThemeSwitcher />
             <button onClick={switchEvent} className="text-sm text-subtle hover:text-body">
               Switch
             </button>
