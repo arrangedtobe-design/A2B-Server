@@ -1,5 +1,4 @@
 export const CATEGORIES = ["Preparation","Ceremony","Photos","Reception","Travel","Vendor","General"];
-export const CATEGORY_COLORS: Record<string,string> = {Preparation:"#E8D5E0",Ceremony:"#D4A574",Photos:"#7BA7BC",Reception:"#9B8EC4",Travel:"#6BAF8D",Vendor:"#E8A87C",General:"#B8B8B8"};
 export const DURATION_OPTIONS = [5,10,15,20,30,45,60,90,120,150,180,240];
 export const PIXELS_PER_MINUTE = 2;
 export const MIN_EVENT_HEIGHT = 20;

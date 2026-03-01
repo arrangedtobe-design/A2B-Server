@@ -4,17 +4,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useThemeColors } from "@/lib/use-theme-colors";
 
 const VENDOR_CATEGORIES = [
   "Venue", "Photographer", "Videographer", "Florist", "Caterer", "Baker",
   "DJ / Band", "Officiant", "Hair & Makeup", "Planner / Coordinator",
   "Rentals", "Stationery", "Transportation", "Lighting", "Photo Booth", "Other"
-];
-
-const VENDOR_COLORS = [
-  "#E8D5E0", "#D4A574", "#7BA7BC", "#9B8EC4", "#6BAF8D", "#E8A87C",
-  "#B8B8B8", "#D4886C", "#8BC4A6", "#A8B4D4", "#D4C474", "#C47B8E",
-  "#74B8D4", "#D4A0D4", "#8ED4B8", "#D4D474"
 ];
 
 export default function VendorList({ userId }: { userId: string }) {
@@ -24,6 +19,9 @@ export default function VendorList({ userId }: { userId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState("All");
+
+  const themeColors = useThemeColors();
+  const VENDOR_COLORS = themeColors.vendorPalette;
 
   // Form fields
   const [name, setName] = useState("");
@@ -104,7 +102,7 @@ export default function VendorList({ userId }: { userId: string }) {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   }
 
   // Count by category
@@ -118,30 +116,30 @@ export default function VendorList({ userId }: { userId: string }) {
     : vendors.filter((v) => v.category === filterCategory);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-page-bg">
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Vendors</h1>
-          <Link href="/dashboard" className="text-sm text-rose-600 hover:text-rose-700">← Dashboard</Link>
+          <h1 className="text-3xl font-bold text-heading">Vendors</h1>
+          <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-white p-3 rounded-lg shadow-sm border text-center">
-            <p className="text-2xl font-bold text-gray-900">{vendors.length}</p>
-            <p className="text-xs text-gray-500">Total Vendors</p>
+          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+            <p className="text-2xl font-bold text-heading">{vendors.length}</p>
+            <p className="text-xs text-subtle">Total Vendors</p>
           </div>
-          <div className="bg-white p-3 rounded-lg shadow-sm border text-center">
-            <p className="text-2xl font-bold text-rose-600">
+          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+            <p className="text-2xl font-bold text-rose-app">
               {new Set(vendors.map((v) => v.category)).size}
             </p>
-            <p className="text-xs text-gray-500">Categories</p>
+            <p className="text-xs text-subtle">Categories</p>
           </div>
-          <div className="bg-white p-3 rounded-lg shadow-sm border text-center">
-            <p className="text-2xl font-bold text-green-600">
+          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
               {vendors.filter((v) => v.email || v.phone).length}
             </p>
-            <p className="text-xs text-gray-500">With Contact</p>
+            <p className="text-xs text-subtle">With Contact</p>
           </div>
         </div>
 
@@ -149,62 +147,62 @@ export default function VendorList({ userId }: { userId: string }) {
         {!showForm ? (
           <button
             onClick={() => { resetForm(); setShowForm(true); }}
-            className="w-full bg-rose-600 text-white py-3 rounded-lg hover:bg-rose-700 font-medium mb-6"
+            className="w-full bg-rose-app text-white py-3 rounded-lg hover:bg-rose-app-hover font-medium mb-6"
           >
             + Add Vendor
           </button>
         ) : (
-          <div className="bg-white p-5 rounded-lg shadow border mb-6">
+          <div className="bg-surface p-5 rounded-lg shadow border border-app-border mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="font-semibold text-gray-800">{editingId ? "Edit Vendor" : "Add Vendor"}</h2>
-              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <h2 className="font-semibold text-heading">{editingId ? "Edit Vendor" : "Add Vendor"}</h2>
+              <button onClick={resetForm} className="text-subtle hover:text-body text-xl">×</button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Vendor Name</label>
+                  <label className="block text-xs font-semibold text-subtle uppercase mb-1">Vendor Name</label>
                   <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                    placeholder='e.g., "Lens & Light Photography"' required className="w-full border rounded-lg px-3 py-2" />
+                    placeholder='e.g., "Lens & Light Photography"' required className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" />
                 </div>
                 <div className="w-[140px]">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Category</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  <label className="block text-xs font-semibold text-subtle uppercase mb-1">Category</label>
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading">
                     {VENDOR_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Contact Name</label>
+                <label className="block text-xs font-semibold text-subtle uppercase mb-1">Contact Name</label>
                 <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)}
-                  placeholder="Primary contact person" className="w-full border rounded-lg px-3 py-2" />
+                  placeholder="Primary contact person" className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" />
               </div>
 
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Email</label>
+                  <label className="block text-xs font-semibold text-subtle uppercase mb-1">Email</label>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                    placeholder="vendor@email.com" className="w-full border rounded-lg px-3 py-2" />
+                    placeholder="vendor@email.com" className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Phone</label>
+                  <label className="block text-xs font-semibold text-subtle uppercase mb-1">Phone</label>
                   <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(555) 123-4567" className="w-full border rounded-lg px-3 py-2" />
+                    placeholder="(555) 123-4567" className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Notes</label>
+                <label className="block text-xs font-semibold text-subtle uppercase mb-1">Notes</label>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Contract details, pricing, special requests..." rows={2} className="w-full border rounded-lg px-3 py-2" />
+                  placeholder="Contract details, pricing, special requests..." rows={2} className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Color Tag</label>
+                <label className="block text-xs font-semibold text-subtle uppercase mb-1">Color Tag</label>
                 <div className="flex gap-2 flex-wrap">
                   {VENDOR_COLORS.map((c) => (
                     <button key={c} type="button" onClick={() => setColor(c)}
-                      className={`w-7 h-7 rounded-full border-2 transition-transform ${color === c ? "border-gray-800 scale-110" : "border-transparent hover:scale-105"}`}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform ${color === c ? "border-foreground scale-110" : "border-transparent hover:scale-105"}`}
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -212,10 +210,10 @@ export default function VendorList({ userId }: { userId: string }) {
               </div>
 
               <div className="flex gap-3">
-                <button type="submit" className="flex-1 bg-rose-600 text-white py-2 rounded-lg hover:bg-rose-700 font-medium">
+                <button type="submit" className="flex-1 bg-rose-app text-white py-2 rounded-lg hover:bg-rose-app-hover font-medium">
                   {editingId ? "Save Changes" : "+ Add Vendor"}
                 </button>
-                <button type="button" onClick={resetForm} className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button type="button" onClick={resetForm} className="px-4 py-2 border border-app-border rounded-lg text-body hover:bg-page-bg">Cancel</button>
               </div>
             </form>
           </div>
@@ -228,7 +226,7 @@ export default function VendorList({ userId }: { userId: string }) {
             if (c !== "All" && count === 0) return null;
             return (
               <button key={c} onClick={() => setFilterCategory(c)}
-                className={`px-3 py-1 rounded-full text-sm ${filterCategory === c ? "bg-rose-600 text-white" : "bg-white text-gray-600 border hover:bg-gray-50"}`}>
+                className={`px-3 py-1 rounded-full text-sm ${filterCategory === c ? "bg-rose-app text-white" : "bg-surface text-body border border-app-border hover:bg-page-bg"}`}>
                 {c} ({count})
               </button>
             );
@@ -238,43 +236,43 @@ export default function VendorList({ userId }: { userId: string }) {
         {/* Vendor List */}
         <div className="space-y-3">
           {filteredVendors.map((vendor) => (
-            <div key={vendor.id} className="bg-white p-4 rounded-lg shadow-sm border-l-4 border hover:shadow-md transition-shadow"
+            <div key={vendor.id} className="bg-surface p-4 rounded-lg shadow-sm border-l-4 border border-app-border hover:shadow-md transition-shadow"
               style={{ borderLeftColor: vendor.color || VENDOR_COLORS[0] }}>
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900">{vendor.name}</p>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{vendor.category}</span>
+                    <p className="font-semibold text-heading">{vendor.name}</p>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-page-bg text-body">{vendor.category}</span>
                   </div>
 
                   {vendor.contact_name && (
-                    <p className="text-sm text-gray-600 mt-1">{vendor.contact_name}</p>
+                    <p className="text-sm text-body mt-1">{vendor.contact_name}</p>
                   )}
 
                   <div className="flex flex-wrap gap-3 mt-1">
                     {vendor.email && (
-                      <span className="text-xs text-gray-500">{vendor.email}</span>
+                      <span className="text-xs text-subtle">{vendor.email}</span>
                     )}
                     {vendor.phone && (
-                      <span className="text-xs text-gray-500">{vendor.phone}</span>
+                      <span className="text-xs text-subtle">{vendor.phone}</span>
                     )}
                   </div>
 
                   {vendor.notes && (
-                    <p className="text-sm text-gray-400 mt-1 italic">{vendor.notes}</p>
+                    <p className="text-sm text-subtle mt-1 italic">{vendor.notes}</p>
                   )}
                 </div>
 
                 <div className="flex gap-1 ml-2 shrink-0">
-                  <button onClick={() => startEdit(vendor)} className="text-gray-400 hover:text-blue-500 text-sm px-1" title="Edit">✎</button>
-                  <button onClick={() => deleteVendor(vendor.id)} className="text-gray-400 hover:text-red-500 text-lg px-1" title="Delete">×</button>
+                  <button onClick={() => startEdit(vendor)} className="text-subtle hover:text-blue-500 text-sm px-1" title="Edit">✎</button>
+                  <button onClick={() => deleteVendor(vendor.id)} className="text-subtle hover:text-red-500 text-lg px-1" title="Delete">×</button>
                 </div>
               </div>
             </div>
           ))}
 
           {filteredVendors.length === 0 && (
-            <p className="text-center text-gray-400 py-8">
+            <p className="text-center text-subtle py-8">
               {vendors.length === 0 ? "No vendors yet. Add your first one!" : "No vendors in this category."}
             </p>
           )}

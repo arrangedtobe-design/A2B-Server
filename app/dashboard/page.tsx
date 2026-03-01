@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function Dashboard() {
   const [event, setEvent] = useState<any>(null);
@@ -72,7 +73,7 @@ export default function Dashboard() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   }
 
   const navItems = [
@@ -86,12 +87,12 @@ export default function Dashboard() {
   const canManageMembers = membership?.role === "owner" || membership?.role === "partner" || membership?.role === "planner";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-page-bg">
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-start mb-2">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{event.name}</h1>
-            <div className="flex gap-3 text-sm text-gray-500 mt-1">
+            <h1 className="text-3xl font-bold text-heading">{event.name}</h1>
+            <div className="flex gap-3 text-sm text-subtle mt-1">
               {event.wedding_date && (
                 <span>{new Date(event.wedding_date + "T00:00:00").toLocaleDateString()}</span>
               )}
@@ -99,20 +100,21 @@ export default function Dashboard() {
               <span>{membership?.role}</span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={switchEvent} className="text-sm text-gray-500 hover:text-gray-700">
+          <div className="flex gap-2 items-center">
+            <ThemeSwitcher />
+            <button onClick={switchEvent} className="text-sm text-subtle hover:text-body">
               Switch
             </button>
-            <button onClick={handleSignOut} className="text-sm text-gray-500 hover:text-gray-700">
+            <button onClick={handleSignOut} className="text-sm text-subtle hover:text-body">
               Sign Out
             </button>
           </div>
         </div>
 
         <div className="mt-4 mb-8 flex items-center gap-2">
-          <span className="text-sm text-gray-500">{members.length} member{members.length !== 1 ? "s" : ""}</span>
+          <span className="text-sm text-subtle">{members.length} member{members.length !== 1 ? "s" : ""}</span>
           {canManageMembers && (
-            <Link href="/members" className="text-sm text-rose-600 hover:text-rose-700">+ Invite</Link>
+            <Link href="/members" className="text-sm text-rose-app hover:text-rose-app-hover">+ Invite</Link>
           )}
         </div>
 
@@ -121,11 +123,11 @@ export default function Dashboard() {
             <Link
               key={item.href}
               href={item.href}
-              className="bg-white p-5 rounded-lg shadow hover:shadow-md transition-shadow border text-center"
+              className="bg-surface p-5 rounded-lg shadow hover:shadow-md transition-shadow border border-app-border text-center"
             >
               <div className="text-2xl mb-2">{item.icon}</div>
-              <p className="font-semibold text-gray-900">{item.label}</p>
-              <p className="text-xs text-gray-500 mt-1">{item.description}</p>
+              <p className="font-semibold text-heading">{item.label}</p>
+              <p className="text-xs text-subtle mt-1">{item.description}</p>
             </Link>
           ))}
         </div>

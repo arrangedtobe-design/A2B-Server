@@ -4,13 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
-const ROLE_COLORS: Record<string, string> = {
-  owner: "bg-rose-100 text-rose-700",
-  partner: "bg-purple-100 text-purple-700",
-  planner: "bg-blue-100 text-blue-700",
-  bridal_party: "bg-green-100 text-green-700",
-};
+import { useThemeColors } from "@/lib/use-theme-colors";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -31,6 +25,8 @@ export default function MembersList({ userId }: { userId: string }) {
   const [success, setSuccess] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+  const themeColors = useThemeColors();
+  const ROLE_COLORS = themeColors.roleColors;
 
   useEffect(() => {
     const eid = localStorage.getItem("activeEventId");
@@ -63,10 +59,6 @@ export default function MembersList({ userId }: { userId: string }) {
 
     setError(null);
     setSuccess(null);
-
-    // Look up user by email using a Supabase edge function or RPC
-    // For MVP, we'll use a simple approach: try to find the user
-    // We need an RPC function for this since we can't query auth.users directly
 
     const { data: foundUser, error: rpcError } = await supabase
       .rpc("get_user_id_by_email", { email_input: email.trim().toLowerCase() });
@@ -115,28 +107,28 @@ export default function MembersList({ userId }: { userId: string }) {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   }
 
   const canManage = myRole === "owner" || myRole === "partner" || myRole === "planner";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-page-bg">
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Wedding Team</h1>
-          <Link href="/dashboard" className="text-sm text-rose-600 hover:text-rose-700">← Dashboard</Link>
+          <h1 className="text-3xl font-bold text-heading">Wedding Team</h1>
+          <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
         </div>
 
         {/* Current Members */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Members ({members.length})</h2>
+          <h2 className="text-lg font-semibold text-heading mb-3">Members ({members.length})</h2>
           <div className="space-y-2">
             {members.map((member) => (
-              <div key={member.id} className="bg-white p-3 rounded-lg shadow-sm border flex items-center justify-between">
+              <div key={member.id} className="bg-surface p-3 rounded-lg shadow-sm border border-app-border flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-heading">
                       {member.display_name || member.user_id.slice(0, 8) + "..."}
                       {member.user_id === userId && " (you)"}
                     </p>
@@ -148,7 +140,7 @@ export default function MembersList({ userId }: { userId: string }) {
                 {canManage && myRole === "owner" && member.user_id !== userId && (
                   <button
                     onClick={() => removeMember(member.id, member.user_id)}
-                    className="text-gray-400 hover:text-red-500 text-lg"
+                    className="text-subtle hover:text-red-500 text-lg"
                   >
                     ×
                   </button>
@@ -160,30 +152,30 @@ export default function MembersList({ userId }: { userId: string }) {
 
         {/* Invite Form */}
         {canManage && (
-          <div className="bg-white p-4 rounded-lg shadow border">
-            <h2 className="font-semibold text-gray-800 mb-3">Invite Someone</h2>
-            <p className="text-sm text-gray-500 mb-3">
+          <div className="bg-surface p-4 rounded-lg shadow border border-app-border">
+            <h2 className="font-semibold text-heading mb-3">Invite Someone</h2>
+            <p className="text-sm text-subtle mb-3">
               They must have an account first. Share the sign-up link with them, then add their email here.
             </p>
             <form onSubmit={handleInvite} className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                <label className="block text-sm font-medium text-body mb-1">Email Address</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="karina@example.com"
                   required
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading"
                 />
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <label className="block text-sm font-medium text-body mb-1">Role</label>
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading"
                   >
                     <option value="partner">Partner (full access)</option>
                     <option value="planner">Planner (full access)</option>
@@ -191,21 +183,21 @@ export default function MembersList({ userId }: { userId: string }) {
                   </select>
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
+                  <label className="block text-sm font-medium text-body mb-1">Display Name</label>
                   <input
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder="e.g. Karina"
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading"
                   />
                 </div>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
-              {success && <p className="text-sm text-green-600">{success}</p>}
+              {success && <p className="text-sm text-green-600 dark:text-green-400">{success}</p>}
               <button
                 type="submit"
-                className="w-full bg-rose-600 text-white py-2 rounded-lg hover:bg-rose-700 font-medium"
+                className="w-full bg-rose-app text-white py-2 rounded-lg hover:bg-rose-app-hover font-medium"
               >
                 Add to Wedding
               </button>
@@ -214,7 +206,7 @@ export default function MembersList({ userId }: { userId: string }) {
         )}
 
         {!canManage && (
-          <p className="text-center text-gray-400 text-sm">Only owners, partners, and planners can invite members.</p>
+          <p className="text-center text-subtle text-sm">Only owners, partners, and planners can invite members.</p>
         )}
       </div>
     </div>

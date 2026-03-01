@@ -8,15 +8,15 @@ export default async function Home() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-page-bg">
         <div className="text-center space-y-6">
-          <h1 className="text-4xl font-bold text-gray-900">Wedding Planner</h1>
-          <p className="text-gray-600">Plan your perfect day, together.</p>
+          <h1 className="text-4xl font-bold text-heading">Wedding Planner</h1>
+          <p className="text-body">Plan your perfect day, together.</p>
           <div className="space-x-4">
-            <a href="/auth/login" className="bg-rose-600 text-white px-6 py-2 rounded-lg hover:bg-rose-700">
+            <a href="/auth/login" className="bg-rose-app text-white px-6 py-2 rounded-lg hover:bg-rose-app-hover">
               Sign In
             </a>
-            <a href="/auth/sign-up" className="bg-white text-rose-600 border border-rose-600 px-6 py-2 rounded-lg hover:bg-rose-50">
+            <a href="/auth/sign-up" className="bg-surface text-rose-app border border-rose-app px-6 py-2 rounded-lg hover:bg-rose-light-bg">
               Sign Up
             </a>
           </div>

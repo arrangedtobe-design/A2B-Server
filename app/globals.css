@@ -29,6 +29,17 @@
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+
+    --app-surface: 0 0% 100%;
+    --app-page-bg: 210 20% 98%;
+    --app-heading: 220 13% 13%;
+    --app-text: 215 14% 34%;
+    --app-text-muted: 218 11% 55%;
+    --app-border: 220 13% 91%;
+    --app-rose: 347 77% 50%;
+    --app-rose-hover: 347 77% 42%;
+    --app-rose-light-bg: 347 100% 95%;
+    --app-rose-light-text: 347 77% 42%;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -55,6 +66,17 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    --app-surface: 0 0% 11%;
+    --app-page-bg: 0 0% 4%;
+    --app-heading: 0 0% 96%;
+    --app-text: 0 0% 74%;
+    --app-text-muted: 0 0% 45%;
+    --app-border: 0 0% 20%;
+    --app-rose: 347 77% 55%;
+    --app-rose-hover: 347 77% 48%;
+    --app-rose-light-bg: 347 50% 15%;
+    --app-rose-light-text: 347 77% 75%;
   }
 }
 
