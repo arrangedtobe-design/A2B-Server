@@ -103,6 +103,33 @@ export default function TimelineView({ userId }: { userId: string }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [selectedItemId]);
 
+  // Realtime subscription — sync changes from other users
+  useEffect(() => {
+    if (!eventId || !activeTimelineId) return;
+
+    const channel = supabase
+      .channel(`timeline-${activeTimelineId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "timeline_events",
+          filter: `timeline_id=eq.${activeTimelineId}`,
+        },
+        () => {
+          // Skip refetch if we're in the middle of our own drag-drop save
+          if (pendingDropRef.current) return;
+          fetchEvents(eventId, activeTimelineId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [eventId, activeTimelineId]);
+
   const fetchVendors = async (eid: string) => {
     const { data } = await supabase.from("vendors").select("*").eq("event_id", eid).order("name");
     setVendors(data || []);
