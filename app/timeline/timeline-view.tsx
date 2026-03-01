@@ -8,6 +8,7 @@ import { useThemeColors } from "@/lib/use-theme-colors";
 import {
   CATEGORIES, DURATION_OPTIONS, PIXELS_PER_MINUTE, MIN_EVENT_HEIGHT,
   formatTime, getEndTime, formatDuration, timeToMinutes, minutesToTime, formatHourLabel, layoutEvents,
+  formatDateShort, formatDateLong,
   TEMPLATES, Template, LayoutItem,
 } from "./timeline-data";
 
@@ -61,6 +62,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   const [showSettings, setShowSettings] = useState(false);
   const [sStartHour, setSStartHour] = useState(6);
   const [sEndHour, setSEndHour] = useState(24);
+  const [sDate, setSDate] = useState<string>("");
   const [showTrash, setShowTrash] = useState(false);
   const [showManager, setShowManager] = useState(false);
   const [filterCategory, setFilterCategory] = useState("All");
@@ -72,6 +74,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   const [dragPreviewItems, setDragPreviewItems] = useState<any[] | null>(null);
   const [dragTimeLabel, setDragTimeLabel] = useState<string | null>(null);
 
+  const readyRef = useRef(false);
   const dragStartYRef = useRef(0);
   const dragMovedRef = useRef(false);
   const pendingDropRef = useRef(false);
@@ -85,6 +88,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   useEffect(() => {
     const eid = localStorage.getItem("activeEventId");
     if (!eid) { router.push("/"); return; }
+    setLoading(true); setShowNewTemplates(false);
     setEventId(eid); fetchVendors(eid); fetchTimelines(eid);
   }, []);
 
@@ -109,8 +113,10 @@ export default function TimelineView({ userId }: { userId: string }) {
       const stored = localStorage.getItem("activeTimelineId");
       const tl = data.find((t: any) => t.id === stored) || data[0];
       setActiveTimelineId(tl.id); setActiveTl(tl); localStorage.setItem("activeTimelineId", tl.id);
-      setSStartHour(tl.start_hour ?? 6); setSEndHour(tl.end_hour ?? 24);
-      await fetchEvents(eid, tl.id); setHasTimeline(true);
+      setSStartHour(tl.start_hour ?? 6); setSEndHour(tl.end_hour ?? 24); setSDate(tl.date || "");
+      setHasTimeline(true); setShowNewTemplates(false);
+      readyRef.current = true;
+      await fetchEvents(eid, tl.id);
     } else {
       const { data: legacy } = await supabase.from("timeline_events").select("id").eq("event_id", eid).is("timeline_id", null).limit(1);
       if (legacy && legacy.length > 0) {
@@ -118,9 +124,11 @@ export default function TimelineView({ userId }: { userId: string }) {
         if (newTl) {
           await supabase.from("timeline_events").update({ timeline_id: newTl.id }).eq("event_id", eid).is("timeline_id", null);
           setActiveTimelineId(newTl.id); setActiveTl(newTl); localStorage.setItem("activeTimelineId", newTl.id);
-          setTimelines([newTl]); await fetchEvents(eid, newTl.id); setHasTimeline(true);
+          setTimelines([newTl]); setHasTimeline(true);
+          readyRef.current = true;
+          await fetchEvents(eid, newTl.id);
         }
-      } else { setHasTimeline(false); }
+      } else { setHasTimeline(false); readyRef.current = true; }
       setLoading(false);
     }
   };
@@ -140,7 +148,7 @@ export default function TimelineView({ userId }: { userId: string }) {
     if (!eventId) return;
     const tl = timelines.find((t: any) => t.id === tid);
     setActiveTimelineId(tid); setActiveTl(tl); localStorage.setItem("activeTimelineId", tid);
-    setSStartHour(tl?.start_hour ?? 6); setSEndHour(tl?.end_hour ?? 24);
+    setSStartHour(tl?.start_hour ?? 6); setSEndHour(tl?.end_hour ?? 24); setSDate(tl?.date || "");
     setLoading(true); setFilterCategory("All"); setShowForm(false); setShowTrash(false);
     await fetchEvents(eventId, tid);
   };
@@ -166,9 +174,9 @@ export default function TimelineView({ userId }: { userId: string }) {
   };
   const saveSettings = async () => {
     if (!activeTimelineId) return;
-    await supabase.from("timelines").update({ start_hour: sStartHour, end_hour: sEndHour }).eq("id", activeTimelineId);
-    setTimelines(prev => prev.map(t => t.id === activeTimelineId ? { ...t, start_hour: sStartHour, end_hour: sEndHour } : t));
-    setActiveTl((prev: any) => prev ? { ...prev, start_hour: sStartHour, end_hour: sEndHour } : prev);
+    await supabase.from("timelines").update({ start_hour: sStartHour, end_hour: sEndHour, date: sDate || null }).eq("id", activeTimelineId);
+    setTimelines(prev => prev.map(t => t.id === activeTimelineId ? { ...t, start_hour: sStartHour, end_hour: sEndHour, date: sDate || null } : t));
+    setActiveTl((prev: any) => prev ? { ...prev, start_hour: sStartHour, end_hour: sEndHour, date: sDate || null } : prev);
     setShowSettings(false);
   };
   const resetForm = () => { setTitle(""); setStartTime(""); setDurationMinutes(30); setCategory("General"); setLocation(""); setNotes(""); setSelectedVendorIds([]); setEditingId(null); setShowForm(false); };
@@ -299,7 +307,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   const duplicateTimeline = async (sid: string) => {
     if (!eventId) return; setLoading(true);
     const src = timelines.find((t: any) => t.id === sid);
-    const { data: tl } = await supabase.from("timelines").insert({ event_id: eventId, name: (src?.name || "Timeline") + " (Copy)", start_hour: src?.start_hour ?? 6, end_hour: src?.end_hour ?? 24, created_by: userId }).select().single();
+    const { data: tl } = await supabase.from("timelines").insert({ event_id: eventId, name: (src?.name || "Timeline") + " (Copy)", start_hour: src?.start_hour ?? 6, end_hour: src?.end_hour ?? 24, date: src?.date || null, created_by: userId }).select().single();
     if (!tl) { setLoading(false); return; }
     const { data: srcEvts } = await supabase.from("timeline_events").select("*").eq("timeline_id", sid).eq("is_trashed", false);
     if (srcEvts?.length) await supabase.from("timeline_events").insert(srcEvts.map((ev: any) => ({ event_id: eventId, timeline_id: tl.id, title: ev.title, start_time: ev.start_time, duration_minutes: ev.duration_minutes, category: ev.category, location: ev.location, notes: ev.notes, sort_order: ev.sort_order, is_trashed: false, created_by: userId })));
@@ -333,7 +341,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   const selectedItem = items.find(i => i.id === selectedItemId) || null;
   const CATEGORY_COLORS = themeColors.timelineCategories;
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
+  if (loading || !readyRef.current) return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   if (!hasTimeline) return (
     <div className="min-h-screen bg-page-bg"><div className="max-w-3xl mx-auto p-6">
       <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">Wedding Day Timeline</h1><Link href="/dashboard" className="text-sm text-rose-app">← Dashboard</Link></div>
@@ -342,7 +350,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   );
   if (showNewTemplates) return (
     <div className="min-h-screen bg-page-bg"><div className="max-w-3xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">New Timeline</h1><Link href="/dashboard" className="text-sm text-rose-app">← Dashboard</Link></div>
+      <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">New Timeline</h1><a href="/dashboard" className="text-sm text-rose-app">← Dashboard</a></div>
       <TemplateSelector onSelect={selectTemplate} onEmpty={startEmpty} onCancel={() => setShowNewTemplates(false)} showCancel={true} />
     </div></div>
   );
@@ -422,19 +430,21 @@ export default function TimelineView({ userId }: { userId: string }) {
         </div>
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           {timelines.map((tl: any) => (
-            <button key={tl.id} onClick={() => switchTimeline(tl.id)}
+            <button key={tl.id} onClick={() => { if (tl.id === activeTimelineId) { setShowSettings(!showSettings); setShowManager(false); } else { switchTimeline(tl.id); } }}
               onDoubleClick={async () => { const n = prompt("Rename:", tl.name); if (!n?.trim() || n.trim() === tl.name) return; await supabase.from("timelines").update({ name: n.trim() }).eq("id", tl.id); setTimelines(prev => prev.map(t => t.id === tl.id ? { ...t, name: n.trim() } : t)); if (tl.id === activeTimelineId) setActiveTl((p: any) => p ? { ...p, name: n.trim() } : p); }}
-              className={"px-3 py-1 rounded-full text-sm " + (tl.id === activeTimelineId ? "bg-rose-app text-white" : "bg-surface text-body border border-app-border hover:bg-page-bg")}>{tl.name}</button>
+              className={"px-3 py-1 rounded-full text-sm " + (tl.id === activeTimelineId ? "bg-rose-app text-white" : "bg-surface text-body border border-app-border hover:bg-page-bg")}>{tl.name}{tl.date ? ` · ${formatDateShort(tl.date)}` : ""}</button>
           ))}
           <button onClick={() => setShowNewTemplates(true)} className="px-3 py-1 rounded-full text-sm bg-surface text-rose-app border border-rose-app hover:bg-rose-light-bg">+ New</button>
-          <button onClick={() => { setShowSettings(!showSettings); setShowManager(false); }} className="px-3 py-1 rounded-full text-sm bg-surface text-subtle border border-app-border hover:bg-page-bg">⏱</button>
-          <button onClick={() => { setShowManager(!showManager); setShowSettings(false); }} className="px-3 py-1 rounded-full text-sm bg-surface text-subtle border border-app-border hover:bg-page-bg">⚙</button>
+          <button onClick={() => { setShowSettings(!showSettings); setShowManager(false); }} className="px-3 py-1 rounded-full text-sm bg-surface text-subtle border border-app-border hover:bg-page-bg">⏱ Settings</button>
+          <button onClick={() => { setShowManager(!showManager); setShowSettings(false); }} className="px-3 py-1 rounded-full text-sm bg-surface text-subtle border border-app-border hover:bg-page-bg">⚙ Manage</button>
         </div>
+        {activeTl?.date && <p className="text-sm text-subtle mb-3">{formatDateLong(activeTl.date)}</p>}
 
         {showSettings && (
           <div className="bg-surface p-4 rounded-lg shadow border border-app-border mb-4">
-            <h3 className="font-semibold text-heading mb-3">Timeline Hours</h3>
-            <div className="flex gap-4 items-end">
+            <h3 className="font-semibold text-heading mb-3">Timeline Settings</h3>
+            <div className="flex gap-4 items-end flex-wrap">
+              <div><label className="block text-xs font-semibold text-subtle uppercase mb-1">Date</label><input type="date" value={sDate} onChange={e => setSDate(e.target.value)} className="border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" /></div>
               <div><label className="block text-xs font-semibold text-subtle uppercase mb-1">Start</label><select value={sStartHour} onChange={e => setSStartHour(Number(e.target.value))} className="border border-app-border rounded-lg px-3 py-2 bg-surface text-heading">{Array.from({length:24},(_,i)=><option key={i} value={i}>{formatHourLabel(i)}</option>)}</select></div>
               <div><label className="block text-xs font-semibold text-subtle uppercase mb-1">End</label><select value={sEndHour} onChange={e => setSEndHour(Number(e.target.value))} className="border border-app-border rounded-lg px-3 py-2 bg-surface text-heading">{Array.from({length:25},(_,i)=>i+1).filter(h=>h>sStartHour).map(h=><option key={h} value={h}>{formatHourLabel(h)}</option>)}</select></div>
               <button onClick={saveSettings} className="bg-rose-app text-white px-4 py-2 rounded-lg hover:bg-rose-app-hover text-sm">Save</button>

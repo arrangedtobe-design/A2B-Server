@@ -9,6 +9,8 @@ export function formatDuration(min:number):string{if(min<60)return`${min} min`;c
 export function timeToMinutes(time:string):number{const[h,m]=time.split(":").map(Number);return h*60+m;}
 export function minutesToTime(mins:number):string{const h=Math.floor(((mins%1440)+1440)%1440/60);const m=((mins%60)+60)%60;return`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;}
 export function formatHourLabel(h:number):string{const hr=((h%24)+24)%24;if(hr===0)return"12 AM";if(hr===12)return"12 PM";return hr>12?`${hr-12} PM`:`${hr} AM`;}
+export function formatDateShort(dateStr:string):string{if(!dateStr)return"";const d=new Date(dateStr+"T00:00:00");const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return`${months[d.getMonth()]} ${d.getDate()}`;}
+export function formatDateLong(dateStr:string):string{if(!dateStr)return"";const d=new Date(dateStr+"T00:00:00");return d.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"});}
 
 export interface LayoutItem {
   id: string;
