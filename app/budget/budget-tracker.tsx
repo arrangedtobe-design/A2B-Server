@@ -39,6 +39,7 @@ export default function BudgetTracker({ userId }: { userId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [chartType, setChartType] = useState<"pie" | "bar">("pie");
+  const [showChart, setShowChart] = useState(true);
   const [filterStatus, setFilterStatus] = useState("All");
 
   const themeColors = useThemeColors();
@@ -256,64 +257,66 @@ export default function BudgetTracker({ userId }: { userId: string }) {
     });
 
     return (
-      <div className="overflow-x-auto flex justify-center">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-48 shrink-0" style={{ minWidth: `${chartWidth}px` }} preserveAspectRatio="xMinYMid meet">
-          {/* Y-axis lines and labels */}
-          {yLines.map(({ val, y }) => (
-            <g key={val}>
-              <line x1={leftPad} y1={y} x2={chartWidth - 10} y2={y} stroke="currentColor" strokeOpacity={0.1} />
-              <text x={leftPad - 5} y={y + 4} textAnchor="end" fontSize="9" fill="currentColor" fillOpacity={0.5}>
-                {val >= 1000 ? `${Math.round(val / 1000)}k` : Math.round(val)}
-              </text>
-            </g>
-          ))}
-
-          {/* Bars */}
-          {items.map((item, idx) => {
-            const est = parseFloat(item.estimated_cost) || 0;
-            const act = parseFloat(item.actual_cost) || 0;
-            const x = leftPad + idx * groupWidth + gap / 2;
-            const estH = (est / maxVal) * drawHeight;
-            const actH = (act / maxVal) * drawHeight;
-
-            return (
-              <g key={item.id}>
-                {/* Estimated bar */}
-                <rect
-                  x={x}
-                  y={topPad + drawHeight - estH}
-                  width={barWidth}
-                  height={estH}
-                  fill="currentColor"
-                  fillOpacity={0.15}
-                  rx={2}
-                />
-                {/* Actual bar */}
-                <rect
-                  x={x + barWidth}
-                  y={topPad + drawHeight - actH}
-                  width={barWidth}
-                  height={actH}
-                  fill={act > est && est > 0 ? "#EF4444" : "#F43F5E"}
-                  fillOpacity={0.7}
-                  rx={2}
-                />
-                {/* Label */}
-                <text
-                  x={x + barWidth}
-                  y={topPad + drawHeight + 14}
-                  textAnchor="middle"
-                  fontSize="8"
-                  fill="currentColor"
-                  fillOpacity={0.6}
-                  transform={`rotate(25, ${x + barWidth}, ${topPad + drawHeight + 14})`}
-                >
-                  {item.description.length > 10 ? item.description.slice(0, 10) + "…" : item.description}
+      <div>
+        <div className="overflow-x-auto flex justify-center">
+          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-48 shrink-0" style={{ minWidth: `${chartWidth}px` }} preserveAspectRatio="xMinYMid meet">
+            {/* Y-axis lines and labels */}
+            {yLines.map(({ val, y }) => (
+              <g key={val}>
+                <line x1={leftPad} y1={y} x2={chartWidth - 10} y2={y} stroke="currentColor" strokeOpacity={0.1} />
+                <text x={leftPad - 5} y={y + 4} textAnchor="end" fontSize="9" fill="currentColor" fillOpacity={0.5}>
+                  {val >= 1000 ? `${Math.round(val / 1000)}k` : Math.round(val)}
                 </text>
               </g>
-            );
-          })}
-        </svg>
+            ))}
+
+            {/* Bars */}
+            {items.map((item, idx) => {
+              const est = parseFloat(item.estimated_cost) || 0;
+              const act = parseFloat(item.actual_cost) || 0;
+              const x = leftPad + idx * groupWidth + gap / 2;
+              const estH = (est / maxVal) * drawHeight;
+              const actH = (act / maxVal) * drawHeight;
+
+              return (
+                <g key={item.id}>
+                  {/* Estimated bar */}
+                  <rect
+                    x={x}
+                    y={topPad + drawHeight - estH}
+                    width={barWidth}
+                    height={estH}
+                    fill="currentColor"
+                    fillOpacity={0.15}
+                    rx={2}
+                  />
+                  {/* Actual bar */}
+                  <rect
+                    x={x + barWidth}
+                    y={topPad + drawHeight - actH}
+                    width={barWidth}
+                    height={actH}
+                    fill={act > est && est > 0 ? "#EF4444" : "#F43F5E"}
+                    fillOpacity={0.7}
+                    rx={2}
+                  />
+                  {/* Label */}
+                  <text
+                    x={x + barWidth}
+                    y={topPad + drawHeight + 14}
+                    textAnchor="middle"
+                    fontSize="8"
+                    fill="currentColor"
+                    fillOpacity={0.6}
+                    transform={`rotate(25, ${x + barWidth}, ${topPad + drawHeight + 14})`}
+                  >
+                    {item.description.length > 10 ? item.description.slice(0, 10) + "…" : item.description}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
         <div className="flex gap-4 justify-center mt-2 text-xs text-subtle">
           <span className="flex items-center gap-1">
             <span className="w-3 h-3 rounded-sm inline-block bg-current opacity-15" /> Estimated
@@ -380,25 +383,35 @@ export default function BudgetTracker({ userId }: { userId: string }) {
         )}
 
         {/* C. Chart Area */}
-        <div className="bg-surface p-5 rounded-lg shadow-sm border border-app-border mb-6">
-          <div className="flex justify-between items-center mb-4">
+        <div className="bg-surface rounded-lg shadow-sm border border-app-border mb-6">
+          <button
+            onClick={() => setShowChart(!showChart)}
+            className="w-full flex justify-between items-center p-5 text-left"
+          >
             <h2 className="font-semibold text-heading">Spending Breakdown</h2>
-            <div className="flex rounded-lg border border-app-border overflow-hidden">
-              <button
-                onClick={() => setChartType("pie")}
-                className={`px-3 py-1 text-sm ${chartType === "pie" ? "bg-rose-app text-white" : "text-body hover:bg-page-bg"}`}
-              >
-                Pie
-              </button>
-              <button
-                onClick={() => setChartType("bar")}
-                className={`px-3 py-1 text-sm ${chartType === "bar" ? "bg-rose-app text-white" : "text-body hover:bg-page-bg"}`}
-              >
-                Bar
-              </button>
+            <span className={`text-subtle transition-transform ${showChart ? "rotate-180" : ""}`}>▼</span>
+          </button>
+          {showChart && (
+            <div className="px-5 pb-5">
+              <div className="flex justify-end mb-4">
+                <div className="flex rounded-lg border border-app-border overflow-hidden">
+                  <button
+                    onClick={() => setChartType("pie")}
+                    className={`px-3 py-1 text-sm ${chartType === "pie" ? "bg-rose-app text-white" : "text-body hover:bg-page-bg"}`}
+                  >
+                    Pie
+                  </button>
+                  <button
+                    onClick={() => setChartType("bar")}
+                    className={`px-3 py-1 text-sm ${chartType === "bar" ? "bg-rose-app text-white" : "text-body hover:bg-page-bg"}`}
+                  >
+                    Bar
+                  </button>
+                </div>
+              </div>
+              {chartType === "pie" ? renderPieChart() : renderBarChart()}
             </div>
-          </div>
-          {chartType === "pie" ? renderPieChart() : renderBarChart()}
+          )}
         </div>
 
         {/* D. Toolbar */}
