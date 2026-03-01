@@ -83,6 +83,7 @@ export default function Dashboard() {
     { label: "Timeline", href: "/timeline", icon: "🕐", description: "Day-of schedule" },
     { label: "Vendors", href: "/vendors", icon: "🏪", description: "Manage vendors" },
     { label: "Budget", href: "/budget", icon: "💰", description: "Track spending" },
+    { label: "Wedding Team", href: "/members", icon: "💍", description: "Manage your team" },
   ];
 
   const canManageMembers = membership?.role === "owner" || membership?.role === "partner" || membership?.role === "planner";
@@ -112,11 +113,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 mb-8 flex items-center gap-2">
-          <span className="text-sm text-subtle">{members.length} member{members.length !== 1 ? "s" : ""}</span>
-          {canManageMembers && (
-            <Link href="/members" className="text-sm text-rose-app hover:text-rose-app-hover">+ Invite</Link>
-          )}
+        <div className="mt-4 mb-8">
+          <Link href="/members" className="text-sm text-rose-app hover:text-rose-app-hover">
+            {members.length} member{members.length !== 1 ? "s" : ""} →
+          </Link>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

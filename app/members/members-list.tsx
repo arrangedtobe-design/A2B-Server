@@ -6,12 +6,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useThemeColors } from "@/lib/use-theme-colors";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { useNotification } from "@/components/ui/notification";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   partner: "Partner",
   planner: "Planner",
   bridal_party: "Bridal Party",
+};
+
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  owner: "Full access. Can manage members, roles, and all settings.",
+  partner: "Full access. Can invite members.",
+  planner: "Full access. Can invite members.",
+  bridal_party: "View only. Can see event details.",
 };
 
 export default function MembersList({ userId }: { userId: string }) {
@@ -22,12 +30,12 @@ export default function MembersList({ userId }: { userId: string }) {
   const [myRole, setMyRole] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
   const themeColors = useThemeColors();
   const ROLE_COLORS = themeColors.roleColors;
+  const { notify } = useNotification();
 
   useEffect(() => {
     const eid = localStorage.getItem("activeEventId");
@@ -58,21 +66,18 @@ export default function MembersList({ userId }: { userId: string }) {
     e.preventDefault();
     if (!email.trim() || !eventId) return;
 
-    setError(null);
-    setSuccess(null);
-
     const { data: foundUser, error: rpcError } = await supabase
       .rpc("get_user_id_by_email", { email_input: email.trim().toLowerCase() });
 
     if (rpcError || !foundUser) {
-      setError("No account found with that email. They need to sign up first.");
+      notify({ type: "error", message: "No account found with that email. They need to sign up first." });
       return;
     }
 
     // Check if already a member
     const existing = members.find((m: any) => m.user_id === foundUser);
     if (existing) {
-      setError("This person is already a member of this event.");
+      notify({ type: "error", message: "This person is already a member of this event." });
       return;
     }
 
@@ -82,28 +87,49 @@ export default function MembersList({ userId }: { userId: string }) {
         event_id: eventId,
         user_id: foundUser,
         role: role,
-        display_name: displayName.trim() || null,
+        display_name: displayName.trim() || email.trim().toLowerCase(),
       });
 
     if (insertError) {
-      setError("Failed to add member: " + insertError.message);
+      notify({ type: "error", message: "Failed to add member: " + insertError.message });
       return;
     }
 
-    setSuccess(`${email} added as ${ROLE_LABELS[role]}!`);
+    notify({ type: "success", message: `${email} added as ${ROLE_LABELS[role]}!` });
     setEmail("");
     setDisplayName("");
     fetchMembers(eventId);
   };
 
-  const removeMember = async (memberId: string, memberUserId: string) => {
+  const removeMember = async (memberId: string, memberUserId: string, memberName: string) => {
     if (!eventId) return;
     if (memberUserId === userId) {
-      setError("You can't remove yourself.");
+      notify({ type: "error", message: "You can't remove yourself." });
       return;
     }
 
+    if (!confirm(`Remove ${memberName} from the wedding team?`)) return;
+
     await supabase.from("event_members").delete().eq("id", memberId);
+    notify({ type: "success", message: `${memberName} has been removed.` });
+    fetchMembers(eventId);
+  };
+
+  const updateRole = async (memberId: string, newRole: string) => {
+    if (!eventId) return;
+
+    const { error: updateError } = await supabase
+      .from("event_members")
+      .update({ role: newRole })
+      .eq("id", memberId);
+
+    if (updateError) {
+      notify({ type: "error", message: "Failed to update role: " + updateError.message });
+      return;
+    }
+
+    notify({ type: "success", message: `Role updated to ${ROLE_LABELS[newRole]}.` });
+    setEditingRoleId(null);
     fetchMembers(eventId);
   };
 
@@ -112,6 +138,7 @@ export default function MembersList({ userId }: { userId: string }) {
   }
 
   const canManage = myRole === "owner" || myRole === "partner" || myRole === "planner";
+  const isOwner = myRole === "owner";
 
   return (
     <div className="min-h-screen bg-page-bg">
@@ -128,29 +155,52 @@ export default function MembersList({ userId }: { userId: string }) {
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-heading mb-3">Members ({members.length})</h2>
           <div className="space-y-2">
-            {members.map((member) => (
-              <div key={member.id} className="bg-surface p-3 rounded-lg shadow-sm border border-app-border flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="font-medium text-heading">
-                      {member.display_name || member.user_id.slice(0, 8) + "..."}
-                      {member.user_id === userId && " (you)"}
-                    </p>
+            {members.map((member) => {
+              const memberName = member.display_name || member.user_id.slice(0, 8) + "...";
+              const canEditRole = isOwner && member.user_id !== userId && member.role !== "owner";
+
+              return (
+                <div key={member.id} className="bg-surface p-3 rounded-lg shadow-sm border border-app-border flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-medium text-heading">
+                        {memberName}
+                        {member.user_id === userId && " (you)"}
+                      </p>
+                    </div>
+                    {editingRoleId === member.id ? (
+                      <select
+                        value={member.role}
+                        onChange={(e) => updateRole(member.id, e.target.value)}
+                        onBlur={() => setEditingRoleId(null)}
+                        autoFocus
+                        className="text-xs px-2 py-0.5 rounded-full border border-app-border bg-surface text-heading"
+                      >
+                        <option value="partner">Partner</option>
+                        <option value="planner">Planner</option>
+                        <option value="bridal_party">Bridal Party</option>
+                      </select>
+                    ) : (
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${ROLE_COLORS[member.role]} ${canEditRole ? "cursor-pointer hover:opacity-80" : ""}`}
+                        onClick={canEditRole ? () => setEditingRoleId(member.id) : undefined}
+                        title={canEditRole ? "Click to change role" : undefined}
+                      >
+                        {ROLE_LABELS[member.role]}
+                      </span>
+                    )}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${ROLE_COLORS[member.role]}`}>
-                    {ROLE_LABELS[member.role]}
-                  </span>
+                  {isOwner && member.user_id !== userId && (
+                    <button
+                      onClick={() => removeMember(member.id, member.user_id, memberName)}
+                      className="text-subtle hover:text-red-500 text-lg"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
-                {canManage && myRole === "owner" && member.user_id !== userId && (
-                  <button
-                    onClick={() => removeMember(member.id, member.user_id)}
-                    className="text-subtle hover:text-red-500 text-lg"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -161,6 +211,21 @@ export default function MembersList({ userId }: { userId: string }) {
             <p className="text-sm text-subtle mb-3">
               They must have an account first. Share the sign-up link with them, then add their email here.
             </p>
+
+            {/* Role descriptions */}
+            <div className="mb-4 space-y-1.5">
+              {Object.entries(ROLE_DESCRIPTIONS)
+                .filter(([key]) => key !== "owner")
+                .map(([key, desc]) => (
+                  <div key={key} className="flex items-start gap-2 text-sm">
+                    <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap mt-0.5 ${ROLE_COLORS[key]}`}>
+                      {ROLE_LABELS[key]}
+                    </span>
+                    <span className="text-subtle">{desc}</span>
+                  </div>
+                ))}
+            </div>
+
             <form onSubmit={handleInvite} className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-body mb-1">Email Address</label>
@@ -197,8 +262,6 @@ export default function MembersList({ userId }: { userId: string }) {
                   />
                 </div>
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              {success && <p className="text-sm text-green-600 dark:text-green-400">{success}</p>}
               <button
                 type="submit"
                 className="w-full bg-rose-app text-white py-2 rounded-lg hover:bg-rose-app-hover font-medium"
