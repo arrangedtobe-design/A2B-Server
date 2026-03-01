@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useThemeColors } from "@/lib/use-theme-colors";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 const BUDGET_CATEGORIES = [
   "General", "Venue", "Photographer", "Videographer", "Florist", "Caterer",
@@ -332,7 +333,10 @@ export default function BudgetTracker({ userId }: { userId: string }) {
         {/* A. Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-heading">Budget</h1>
-          <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
+          </div>
         </div>
 
         {/* B. Stats Cards */}

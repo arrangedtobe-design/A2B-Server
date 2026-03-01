@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function EventDashboard({ memberships, userId }: { memberships: any[]; userId: string }) {
   const [showCreate, setShowCreate] = useState(false);
@@ -70,9 +71,12 @@ export default function EventDashboard({ memberships, userId }: { memberships: a
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-heading">Wedding Planner</h1>
-          <button onClick={handleSignOut} className="text-subtle hover:text-body text-sm">
-            Sign Out
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <button onClick={handleSignOut} className="text-subtle hover:text-body text-sm">
+              Sign Out
+            </button>
+          </div>
         </div>
 
         {memberships.length > 0 && (

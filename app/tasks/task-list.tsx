@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useThemeColors } from "@/lib/use-theme-colors";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 const CATEGORIES = [
   "General", "Venue", "Catering", "Attire", "Flowers & Decor",
@@ -430,7 +431,10 @@ export default function TaskList({ userId }: { userId: string }) {
       <div className="max-w-5xl mx-auto p-4 lg:p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl lg:text-3xl font-bold text-heading">Checklist</h1>
-          <a href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</a>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <a href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</a>
+          </div>
         </div>
 
         {/* Progress Bar */}

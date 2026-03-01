@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useThemeColors } from "@/lib/use-theme-colors";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -117,7 +118,10 @@ export default function MembersList({ userId }: { userId: string }) {
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-heading">Wedding Team</h1>
-          <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
+          </div>
         </div>
 
         {/* Current Members */}

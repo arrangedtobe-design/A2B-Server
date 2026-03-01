@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function GuestList({ userId }: { userId: string }) {
   const [guests, setGuests] = useState<any[]>([]);
@@ -96,7 +97,10 @@ export default function GuestList({ userId }: { userId: string }) {
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-heading">Guest List</h1>
-          <a href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</a>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <a href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</a>
+          </div>
         </div>
 
         {/* Stats */}

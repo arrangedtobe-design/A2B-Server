@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useThemeColors } from "@/lib/use-theme-colors";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import {
   CATEGORIES, DURATION_OPTIONS, PIXELS_PER_MINUTE, MIN_EVENT_HEIGHT,
   formatTime, getEndTime, formatDuration, timeToMinutes, minutesToTime, formatHourLabel, layoutEvents,
@@ -344,13 +345,13 @@ export default function TimelineView({ userId }: { userId: string }) {
   if (loading || !readyRef.current) return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   if (!hasTimeline) return (
     <div className="min-h-screen bg-page-bg"><div className="max-w-3xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">Wedding Day Timeline</h1><Link href="/dashboard" className="text-sm text-rose-app">← Dashboard</Link></div>
+      <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">Wedding Day Timeline</h1><div className="flex items-center gap-2"><ThemeSwitcher /><Link href="/dashboard" className="text-sm text-rose-app">← Dashboard</Link></div></div>
       <TemplateSelector onSelect={selectTemplate} onEmpty={startEmpty} showCancel={false} />
     </div></div>
   );
   if (showNewTemplates) return (
     <div className="min-h-screen bg-page-bg"><div className="max-w-3xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">New Timeline</h1><a href="/dashboard" className="text-sm text-rose-app">← Dashboard</a></div>
+      <div className="flex justify-between items-center mb-2"><h1 className="text-3xl font-bold text-heading">New Timeline</h1><div className="flex items-center gap-2"><ThemeSwitcher /><a href="/dashboard" className="text-sm text-rose-app">← Dashboard</a></div></div>
       <TemplateSelector onSelect={selectTemplate} onEmpty={startEmpty} onCancel={() => setShowNewTemplates(false)} showCancel={true} />
     </div></div>
   );
@@ -426,7 +427,10 @@ export default function TimelineView({ userId }: { userId: string }) {
       <div className="max-w-full mx-auto p-4 lg:p-6">
         <div className="flex justify-between items-center mb-2">
           <h1 className="text-2xl lg:text-3xl font-bold text-heading">Wedding Day Timeline</h1>
-          <Link href="/dashboard" className="text-sm text-rose-app">← Dashboard</Link>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <Link href="/dashboard" className="text-sm text-rose-app">← Dashboard</Link>
+          </div>
         </div>
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           {timelines.map((tl: any) => (
