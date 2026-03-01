@@ -71,16 +71,12 @@ export default function TimelineView({ userId }: { userId: string }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragPreviewItems, setDragPreviewItems] = useState<any[] | null>(null);
   const [dragTimeLabel, setDragTimeLabel] = useState<string | null>(null);
-  const [dragColPref, setDragColPref] = useState<number | null>(null);
 
   const dragStartYRef = useRef(0);
-  const dragColPrefRef = useRef<number>(0.5);
   const dragMovedRef = useRef(false);
   const pendingDropRef = useRef(false);
   const dragOrigMinRef = useRef(0);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const timelineLeftRef = useRef(0);
-  const timelineWidthRef = useRef(0);
 
   const router = useRouter();
   const supabase = createClient();
@@ -212,41 +208,25 @@ export default function TimelineView({ userId }: { userId: string }) {
     dragStartYRef.current = clientY;
     dragOrigMinRef.current = timeToMinutes(item.start_time);
 
-    // Measure timeline area for column preference
-    const tlEl = timelineRef.current;
-    if (tlEl) {
-      const rect = tlEl.getBoundingClientRect();
-      timelineLeftRef.current = rect.left + 60;
-      timelineWidthRef.current = rect.width - 60;
-    }
-
     if (pendingDropRef.current) return;
     dragMovedRef.current = false;
-    // Don't set dragId yet — wait for movement threshold
     setDragTimeLabel(null);
-    setDragColPref(null);
     setDragPreviewItems(null);
 
     const onMove = (ev: MouseEvent | TouchEvent) => {
       const y = "touches" in ev ? ev.touches[0].clientY : ev.clientY;
-      const x = "touches" in ev ? ev.touches[0].clientX : ev.clientX;
 
       // Wait for 5px movement before activating drag (prevents jump on click)
       if (!dragMovedRef.current) {
         if (Math.abs(y - dragStartYRef.current) < 5) return;
         dragMovedRef.current = true;
         setDragId(item.id);
-              }
+      }
 
       const rawMin = dragOrigMinRef.current + (y - dragStartYRef.current) / PIXELS_PER_MINUTE;
       const snapped = Math.round(rawMin / 5) * 5;
       const clamped = Math.max(0, Math.min(23 * 60 + 55, snapped));
 
-      const relX = x - timelineLeftRef.current;
-      const frac = Math.max(0, Math.min(1, relX / timelineWidthRef.current));
-
-      setDragColPref(frac);
-      dragColPrefRef.current = frac;
       setDragTimeLabel(formatTime(minutesToTime(clamped)));
       setDragPreviewItems(buildPreview(item.id, clamped, items));
     };
@@ -258,7 +238,7 @@ export default function TimelineView({ userId }: { userId: string }) {
       document.removeEventListener("touchend", onEnd);
 
       if (!dragMovedRef.current) {
-        setDragId(null); setDragTimeLabel(null); setDragPreviewItems(null); setDragColPref(null);
+        setDragId(null); setDragTimeLabel(null); setDragPreviewItems(null);
         dragMovedRef.current = false;
         return;
       }
@@ -268,32 +248,30 @@ export default function TimelineView({ userId }: { userId: string }) {
 
       setDragPreviewItems(preview => {
         if (!preview) {
-          setDragId(null); setDragColPref(null);
+          setDragId(null);
           pendingDropRef.current = false;
           return null;
         }
         const dragged = preview.find(p => p.id === item.id);
         const orig = items.find(i => i.id === item.id);
         if (dragged && orig && dragged.start_time !== orig.start_time) {
-          // Save column preference as sort_order so greedy layout preserves position
-          const colOrder = Math.round((dragColPrefRef.current ?? 0.5) * 1000) - 500;
           supabase.from("timeline_events")
-            .update({ start_time: dragged.start_time, sort_order: colOrder, updated_at: new Date().toISOString() })
+            .update({ start_time: dragged.start_time, updated_at: new Date().toISOString() })
             .eq("id", item.id)
             .then(() => {
               if (eventId && activeTimelineId) {
                 fetchEvents(eventId, activeTimelineId).then(() => {
-                  setDragId(null); setDragPreviewItems(null); setDragColPref(null);
+                  setDragId(null); setDragPreviewItems(null);
                   pendingDropRef.current = false;
                 });
               } else {
-                setDragId(null); setDragPreviewItems(null); setDragColPref(null);
+                setDragId(null); setDragPreviewItems(null);
                 pendingDropRef.current = false;
               }
             });
           return preview;
         } else {
-          setDragId(null); setDragColPref(null);
+          setDragId(null);
           pendingDropRef.current = false;
           return null;
         }
@@ -347,7 +325,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   const totalHeight = (dEndMin - dStartMin) * PIXELS_PER_MINUTE;
   const filteredItems = filterCategory === "All" ? items : items.filter(i => i.category === filterCategory);
   const displayItems = dragPreviewItems ? (filterCategory === "All" ? dragPreviewItems : dragPreviewItems.filter(i => i.category === filterCategory)) : filteredItems;
-  const positioned = layoutEvents(displayItems, dStartMin, dragId, dragColPref);
+  const positioned = layoutEvents(displayItems, dStartMin);
   const hourLabels: { hour: number; label: string; top: number }[] = [];
   for (let h = activeTl?.start_hour ?? 6; h <= (activeTl?.end_hour ?? 24); h++) hourLabels.push({ hour: h, label: formatHourLabel(h), top: (h * 60 - dStartMin) * PIXELS_PER_MINUTE });
   const vendorName = (vid: string) => vendors.find(v => v.id === vid)?.name || "Unknown";

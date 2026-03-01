@@ -23,9 +23,10 @@ export interface LayoutItem {
   _totalCols: number;
 }
 
-export function layoutEvents(items: any[], dStartMin: number, dragId?: string | null, dragColFraction?: number | null): LayoutItem[] {
+export function layoutEvents(items: any[], dStartMin: number): LayoutItem[] {
   if (!items.length) return [];
 
+  // 1. Compute positions
   const withPos = items.map(item => {
     const startMin = timeToMinutes(item.start_time);
     const top = (startMin - dStartMin) * PIXELS_PER_MINUTE;
@@ -34,29 +35,7 @@ export function layoutEvents(items: any[], dStartMin: number, dragId?: string | 
     return { ...item, _top: top, _height: height, _startMin: startMin, _endMin: endMin, _col: 0, _colSpan: 1, _totalCols: 1 };
   });
 
-  // Sweep-line: find max concurrency during each event's lifetime
-  const sweepEvents: { min: number; type: "start" | "end"; idx: number }[] = [];
-  for (let i = 0; i < withPos.length; i++) {
-    sweepEvents.push({ min: withPos[i]._startMin, type: "start", idx: i });
-    sweepEvents.push({ min: withPos[i]._endMin, type: "end", idx: i });
-  }
-  sweepEvents.sort((a, b) => a.min - b.min || (a.type === "end" ? -1 : 1));
-
-  const maxConcurrent: number[] = new Array(withPos.length).fill(1);
-  const active = new Set<number>();
-  for (const ev of sweepEvents) {
-    if (ev.type === "start") {
-      active.add(ev.idx);
-      const count = active.size;
-      for (const idx of active) {
-        if (count > maxConcurrent[idx]) maxConcurrent[idx] = count;
-      }
-    } else {
-      active.delete(ev.idx);
-    }
-  }
-
-  // Direct overlap pairs
+  // 2. Build overlap adjacency list
   const overlaps: number[][] = Array.from({ length: withPos.length }, () => []);
   for (let i = 0; i < withPos.length; i++) {
     for (let j = i + 1; j < withPos.length; j++) {
@@ -67,66 +46,90 @@ export function layoutEvents(items: any[], dStartMin: number, dragId?: string | 
     }
   }
 
-  // Greedy column assignment sorted by sort_order then start_time
-  const sorted = withPos
-    .map((_, i) => i)
-    .sort((a, b) => (withPos[a].sort_order ?? 0) - (withPos[b].sort_order ?? 0) || withPos[a]._startMin - withPos[b]._startMin);
-
-  const colAssign: number[] = new Array(withPos.length).fill(-1);
-  for (const idx of sorted) {
-    const usedCols = new Set<number>();
-    for (const other of overlaps[idx]) {
-      if (colAssign[other] >= 0) usedCols.add(colAssign[other]);
-    }
-    let col = 0;
-    while (usedCols.has(col)) col++;
-    colAssign[idx] = col;
-  }
-
-  for (let i = 0; i < withPos.length; i++) {
-    // totalCols must be at least maxConcurrent AND at least enough to fit 
-    // the highest column among this event and its direct overlaps
-    let maxCol = colAssign[i];
-    for (const other of overlaps[i]) {
-      if (colAssign[other] > maxCol) maxCol = colAssign[other];
-    }
-    withPos[i]._col = colAssign[i];
-    withPos[i]._totalCols = Math.max(maxConcurrent[i], maxCol + 1);
-  }
-
-  // Expand column spans into empty adjacent columns
-  for (let i = 0; i < withPos.length; i++) {
-    if (withPos[i]._totalCols <= 1) continue;
-    const myStart = withPos[i]._startMin;
-    const myEnd = withPos[i]._endMin;
-    let rightCol = withPos[i]._col;
-    
-    while (rightCol < withPos[i]._totalCols - 1) {
-      const testCol = rightCol + 1;
-      // Check if any direct overlap occupies this column
-      const blocked = overlaps[i].some(other => colAssign[other] === testCol);
-      if (blocked) break;
-      rightCol = testCol;
-    }
-    withPos[i]._colSpan = rightCol - withPos[i]._col + 1;
-  }
-
-  // Drag column preference
-  if (dragId && dragColFraction !== null && dragColFraction !== undefined) {
-    const dragIdx = withPos.findIndex(item => item.id === dragId);
-    if (dragIdx >= 0 && overlaps[dragIdx].length > 0) {
-      const totalCols = withPos[dragIdx]._totalCols;
-      const targetCol = Math.min(Math.floor(dragColFraction * totalCols), totalCols - 1);
-      const currentCol = colAssign[dragIdx];
-      if (targetCol !== currentCol) {
-        const occupant = overlaps[dragIdx].find(other => colAssign[other] === targetCol);
-        if (occupant !== undefined) {
-          colAssign[occupant] = currentCol;
-          withPos[occupant]._col = currentCol;
-        }
-        colAssign[dragIdx] = targetCol;
-        withPos[dragIdx]._col = targetCol;
+  // 3. Find connected components via DFS
+  const visited = new Uint8Array(withPos.length);
+  const components: number[][] = [];
+  for (let seed = 0; seed < withPos.length; seed++) {
+    if (visited[seed]) continue;
+    const group: number[] = [];
+    const stack = [seed];
+    visited[seed] = 1;
+    while (stack.length) {
+      const cur = stack.pop()!;
+      group.push(cur);
+      for (const other of overlaps[cur]) {
+        if (!visited[other]) { visited[other] = 1; stack.push(other); }
       }
+    }
+    components.push(group);
+  }
+
+  // 4. Process each connected component
+  const colAssign: number[] = new Array(withPos.length).fill(-1);
+
+  for (const group of components) {
+    if (group.length === 1) {
+      // Solo event — full width
+      colAssign[group[0]] = 0;
+      withPos[group[0]]._col = 0;
+      withPos[group[0]]._totalCols = 1;
+      withPos[group[0]]._colSpan = 1;
+      continue;
+    }
+
+    // Sweep line within this component to find max concurrency
+    const sweepEvents: { min: number; type: number; idx: number }[] = [];
+    for (const idx of group) {
+      sweepEvents.push({ min: withPos[idx]._startMin, type: 0, idx }); // 0 = start
+      sweepEvents.push({ min: withPos[idx]._endMin, type: 1, idx });   // 1 = end
+    }
+    sweepEvents.sort((a, b) => a.min - b.min || a.type - b.type); // ends before starts at same time? No — starts first so we count peak
+    // Actually: at the same minute, starts should come before ends to count peak concurrency
+    // type 0 (start) < type 1 (end), so starts sort first — correct
+
+    let totalCols = 1;
+    const active = new Set<number>();
+    for (const ev of sweepEvents) {
+      if (ev.type === 0) {
+        active.add(ev.idx);
+        if (active.size > totalCols) totalCols = active.size;
+      } else {
+        active.delete(ev.idx);
+      }
+    }
+
+    // Greedy column assignment: start time asc, then longest duration first
+    const sorted = [...group].sort((a, b) =>
+      withPos[a]._startMin - withPos[b]._startMin ||
+      (withPos[b]._endMin - withPos[b]._startMin) - (withPos[a]._endMin - withPos[a]._startMin)
+    );
+
+    for (const idx of sorted) {
+      const usedCols = new Set<number>();
+      for (const other of overlaps[idx]) {
+        if (colAssign[other] >= 0) usedCols.add(colAssign[other]);
+      }
+      let col = 0;
+      while (usedCols.has(col)) col++;
+      colAssign[idx] = col;
+    }
+
+    // Assign shared totalCols to all events in this component
+    for (const idx of group) {
+      withPos[idx]._col = colAssign[idx];
+      withPos[idx]._totalCols = totalCols;
+    }
+
+    // Expand column spans rightward into unoccupied adjacent columns
+    for (const idx of group) {
+      let rightCol = withPos[idx]._col;
+      while (rightCol < totalCols - 1) {
+        const testCol = rightCol + 1;
+        const blocked = overlaps[idx].some(other => colAssign[other] === testCol);
+        if (blocked) break;
+        rightCol = testCol;
+      }
+      withPos[idx]._colSpan = rightCol - withPos[idx]._col + 1;
     }
   }
 
