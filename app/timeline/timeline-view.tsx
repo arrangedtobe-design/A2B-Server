@@ -75,12 +75,19 @@ export default function TimelineView({ userId }: { userId: string }) {
   const [dragPreviewItems, setDragPreviewItems] = useState<any[] | null>(null);
   const [dragTimeLabel, setDragTimeLabel] = useState<string | null>(null);
 
+  // Remote drag state (V2 live preview + locking)
+  const [remoteDrags, setRemoteDrags] = useState<Record<string, { userId: string; startTime: string }>>({});
+
   const readyRef = useRef(false);
   const dragStartYRef = useRef(0);
   const dragMovedRef = useRef(false);
   const pendingDropRef = useRef(false);
   const dragOrigMinRef = useRef(0);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const remoteDragTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  const channelRef = useRef<any>(null);
+  const lastBroadcastRef = useRef(0);
+  const tabIdRef = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
 
   const router = useRouter();
   const supabase = createClient();
@@ -103,7 +110,7 @@ export default function TimelineView({ userId }: { userId: string }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [selectedItemId]);
 
-  // Realtime subscription — sync changes from other users
+  // Realtime subscription — sync changes from other users + broadcast for live drag preview
   useEffect(() => {
     if (!eventId || !activeTimelineId) return;
 
@@ -123,10 +130,41 @@ export default function TimelineView({ userId }: { userId: string }) {
           fetchEvents(eventId, activeTimelineId);
         }
       )
+      .on('broadcast', { event: 'drag_move' }, ({ payload }) => {
+        if (payload.tabId === tabIdRef.current) return;
+        const { cardId, startTime: st } = payload;
+        setRemoteDrags(prev => ({ ...prev, [cardId]: { userId: payload.userId, startTime: st } }));
+        // Reset 3-second timeout for this card (auto-clear if user disconnects)
+        if (remoteDragTimeouts.current[cardId]) clearTimeout(remoteDragTimeouts.current[cardId]);
+        remoteDragTimeouts.current[cardId] = setTimeout(() => {
+          setRemoteDrags(prev => { const next = { ...prev }; delete next[cardId]; return next; });
+          delete remoteDragTimeouts.current[cardId];
+        }, 3000);
+      })
+      .on('broadcast', { event: 'drag_end' }, ({ payload }) => {
+        if (payload.tabId === tabIdRef.current) return;
+        const { cardId, startTime: finalTime } = payload;
+        // Optimistically update items to final position so card doesn't snap back
+        if (finalTime) {
+          setItems(prev => prev.map(i => i.id === cardId ? { ...i, start_time: finalTime } : i));
+        }
+        setRemoteDrags(prev => { const next = { ...prev }; delete next[cardId]; return next; });
+        if (remoteDragTimeouts.current[cardId]) {
+          clearTimeout(remoteDragTimeouts.current[cardId]);
+          delete remoteDragTimeouts.current[cardId];
+        }
+      })
       .subscribe();
+
+    channelRef.current = channel;
 
     return () => {
       supabase.removeChannel(channel);
+      channelRef.current = null;
+      // Clear all remote drag timeouts
+      Object.values(remoteDragTimeouts.current).forEach(t => clearTimeout(t));
+      remoteDragTimeouts.current = {};
+      setRemoteDrags({});
     };
   }, [eventId, activeTimelineId]);
 
@@ -240,6 +278,10 @@ export default function TimelineView({ userId }: { userId: string }) {
 
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, item: any) => {
     e.preventDefault(); e.stopPropagation();
+
+    // Card locking: if another user is dragging this card, block
+    if (remoteDrags[item.id]) return;
+
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     dragStartYRef.current = clientY;
     dragOrigMinRef.current = timeToMinutes(item.start_time);
@@ -265,6 +307,17 @@ export default function TimelineView({ userId }: { userId: string }) {
 
       setDragTimeLabel(formatTime(minutesToTime(clamped)));
       setDragPreviewItems(buildPreview(item.id, clamped, items));
+
+      // Broadcast drag_move (throttled to ~5/second)
+      const now = Date.now();
+      if (channelRef.current && now - lastBroadcastRef.current > 200) {
+        lastBroadcastRef.current = now;
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'drag_move',
+          payload: { cardId: item.id, userId, tabId: tabIdRef.current, startTime: minutesToTime(clamped) },
+        });
+      }
     };
 
     const onEnd = () => {
@@ -291,22 +344,36 @@ export default function TimelineView({ userId }: { userId: string }) {
         const dragged = preview.find(p => p.id === item.id);
         const orig = items.find(i => i.id === item.id);
         if (dragged && orig && dragged.start_time !== orig.start_time) {
+          // Optimistically update items so position holds when we clear drag preview
+          setItems(prev => prev.map(i => i.id === item.id ? { ...i, start_time: dragged.start_time } : i));
+          setDragId(null);
+          pendingDropRef.current = false;
+
+          // Broadcast drag_end with final position so remote tabs can optimistically update
+          if (channelRef.current) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'drag_end',
+              payload: { cardId: item.id, userId, tabId: tabIdRef.current, startTime: dragged.start_time },
+            });
+          }
+
           supabase.from("timeline_events")
             .update({ start_time: dragged.start_time, updated_at: new Date().toISOString() })
             .eq("id", item.id)
             .then(() => {
-              if (eventId && activeTimelineId) {
-                fetchEvents(eventId, activeTimelineId).then(() => {
-                  setDragId(null); setDragPreviewItems(null);
-                  pendingDropRef.current = false;
-                });
-              } else {
-                setDragId(null); setDragPreviewItems(null);
-                pendingDropRef.current = false;
-              }
+              if (eventId && activeTimelineId) fetchEvents(eventId, activeTimelineId);
             });
-          return preview;
+          return null;
         } else {
+          // No change — broadcast drag_end to unlock
+          if (channelRef.current) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'drag_end',
+              payload: { cardId: item.id, userId, tabId: tabIdRef.current },
+            });
+          }
           setDragId(null);
           pendingDropRef.current = false;
           return null;
@@ -319,7 +386,7 @@ export default function TimelineView({ userId }: { userId: string }) {
     document.addEventListener("mouseup", onEnd);
     document.addEventListener("touchmove", onMove, { passive: false });
     document.addEventListener("touchend", onEnd);
-  }, [items, eventId, activeTimelineId, buildPreview]);
+  }, [items, eventId, activeTimelineId, buildPreview, remoteDrags, userId]);
 
   const trashItem = async (item: any) => {
     if (!eventId || !activeTimelineId) return;
@@ -360,7 +427,14 @@ export default function TimelineView({ userId }: { userId: string }) {
   const dEndMin = (activeTl?.end_hour ?? 24) * 60;
   const totalHeight = (dEndMin - dStartMin) * PIXELS_PER_MINUTE;
   const filteredItems = filterCategory === "All" ? items : items.filter(i => i.category === filterCategory);
-  const displayItems = dragPreviewItems ? (filterCategory === "All" ? dragPreviewItems : dragPreviewItems.filter(i => i.category === filterCategory)) : filteredItems;
+  let displayItems = dragPreviewItems ? (filterCategory === "All" ? dragPreviewItems : dragPreviewItems.filter(i => i.category === filterCategory)) : filteredItems;
+  // Apply remote drag positions on top (live preview from other users)
+  if (Object.keys(remoteDrags).length > 0) {
+    displayItems = displayItems.map(item => {
+      const rd = remoteDrags[item.id];
+      return rd ? { ...item, start_time: rd.startTime } : item;
+    });
+  }
   const positioned = layoutEvents(displayItems, dStartMin);
   const hourLabels: { hour: number; label: string; top: number }[] = [];
   for (let h = activeTl?.start_hour ?? 6; h <= (activeTl?.end_hour ?? 24); h++) hourLabels.push({ hour: h, label: formatHourLabel(h), top: (h * 60 - dStartMin) * PIXELS_PER_MINUTE });
@@ -524,6 +598,7 @@ export default function TimelineView({ userId }: { userId: string }) {
                 const endTime = getEndTime(item.start_time, item.duration_minutes);
                 const isCompact = item._height < 55;
                 const isDragging = dragId === item.id && !pendingDropRef.current;
+                const isRemoteDrag = !!remoteDrags[item.id];
                 const isSelected = selectedItemId === item.id;
                 const vids = eventVendors[item.id] || [];
 
@@ -543,15 +618,15 @@ export default function TimelineView({ userId }: { userId: string }) {
                       left: item._totalCols === 1 ? `${eventAreaStart}px` : `calc(${eventAreaStart}px + (100% - ${eventAreaStart}px) * ${item._col / item._totalCols})`,
                       width: item._totalCols === 1 ? `calc(100% - ${eventAreaStart}px)` : `calc((100% - ${eventAreaStart}px) * ${colSpan / item._totalCols} - ${gap}px)`,
                       top: item._top + "px", height: item._height + "px",
-                      zIndex: isDragging ? 50 : isSelected ? 20 : 10,
-                      transition: isDragging ? "none" : "top 0.15s ease, height 0.15s ease",
+                      zIndex: isDragging ? 50 : isRemoteDrag ? 30 : isSelected ? 20 : 10,
+                      transition: isDragging ? "none" : isRemoteDrag ? "top 0.2s ease, height 0.2s ease" : "top 0.15s ease, height 0.15s ease",
                     }}>
                       <div
-                        className={"h-full rounded-lg shadow-sm border border-app-border hover:shadow-md overflow-hidden flex cursor-pointer " + (isSelected ? "ring-2 ring-rose-400 " : "") + (isDragging ? "shadow-lg ring-2 ring-amber-400 " : "")}
+                        className={"h-full rounded-lg shadow-sm border border-app-border hover:shadow-md overflow-hidden flex cursor-pointer " + (isSelected ? "ring-2 ring-rose-400 " : "") + (isDragging ? "shadow-lg ring-2 ring-amber-400 " : "") + (isRemoteDrag ? "ring-2 ring-blue-400 opacity-80 " : "")}
                         style={{ borderLeftWidth: "4px", borderLeftColor: bgColor, backgroundColor: isDragging ? themeColors.surfaces.dragHighlight : themeColors.surfaces.cardBg }}
                         onClick={() => { if (!dragId && !dragMovedRef.current) { setSelectedItemId(isSelected ? null : item.id); setShowForm(false); } }}
                         data-event-card>
-                        <div className="w-6 shrink-0 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none"
+                        <div className={"w-6 shrink-0 flex items-center justify-center touch-none " + (isRemoteDrag ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing")}
                           style={{ backgroundColor: bgColor + "30" }}
                           onMouseDown={e => handleDragStart(e, item)} onTouchStart={e => handleDragStart(e, item)}>
                           <span className="text-subtle text-xs">⠿</span>
