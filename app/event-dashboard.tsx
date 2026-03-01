@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function EventDashboard({ memberships, userId }: { memberships: any[]; userId: string }) {
   const [showCreate, setShowCreate] = useState(false);
@@ -55,8 +55,13 @@ export default function EventDashboard({ memberships, userId }: { memberships: a
   const activeEventId = typeof window !== "undefined" ? localStorage.getItem("activeEventId") : null;
   const activeMembership = memberships.find((m: any) => m.event_id === activeEventId);
 
+  useEffect(() => {
+    if (activeMembership) {
+      router.push("/dashboard");
+    }
+  }, [activeMembership, router]);
+
   if (activeMembership) {
-    router.push("/dashboard");
     return null;
   }
 
