@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useThemeColors } from "@/lib/use-theme-colors";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { useNotification } from "@/components/ui/notification";
 import {
   CATEGORIES, DURATION_OPTIONS, PIXELS_PER_MINUTE, MIN_EVENT_HEIGHT,
   formatTime, getEndTime, formatDuration, timeToMinutes, minutesToTime, formatHourLabel, layoutEvents,
@@ -88,10 +89,20 @@ export default function TimelineView({ userId }: { userId: string }) {
   const channelRef = useRef<any>(null);
   const lastBroadcastRef = useRef(0);
   const tabIdRef = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const atBoundaryRef = useRef(false);
+  const boundaryNotifIdRef = useRef<string | null>(null);
+  const dStartMinRef = useRef(0);
+  const dEndMinRef = useRef(0);
 
   const router = useRouter();
   const supabase = createClient();
   const themeColors = useThemeColors();
+  const { notify, dismiss } = useNotification();
+  const notifyRef = useRef(notify);
+  const dismissRef = useRef(dismiss);
+  notifyRef.current = notify;
+  dismissRef.current = dismiss;
 
   useEffect(() => {
     const eid = localStorage.getItem("activeEventId");
@@ -270,6 +281,9 @@ export default function TimelineView({ userId }: { userId: string }) {
   const toggleVendor = (vid: string) => setSelectedVendorIds(prev => prev.includes(vid) ? prev.filter(v => v !== vid) : [...prev, vid]);
 
   const dStartMin = (activeTl?.start_hour ?? 6) * 60;
+  const dEndMin = (activeTl?.end_hour ?? 24) * 60;
+  dStartMinRef.current = dStartMin;
+  dEndMinRef.current = dEndMin;
 
   // Build preview: just move the dragged item, layout engine handles overlap columns
   const buildPreview = useCallback((draggedId: string, newMin: number, allItems: any[]) => {
@@ -303,7 +317,38 @@ export default function TimelineView({ userId }: { userId: string }) {
 
       const rawMin = dragOrigMinRef.current + (y - dragStartYRef.current) / PIXELS_PER_MINUTE;
       const snapped = Math.round(rawMin / 5) * 5;
-      const clamped = Math.max(0, Math.min(23 * 60 + 55, snapped));
+      const minBound = dStartMinRef.current;
+      const maxBound = dEndMinRef.current - item.duration_minutes;
+      const clamped = Math.max(minBound, Math.min(maxBound, snapped));
+
+      // Boundary detection
+      if (snapped !== clamped && !atBoundaryRef.current) {
+        atBoundaryRef.current = true;
+        boundaryNotifIdRef.current = notifyRef.current({
+          id: "drag-boundary",
+          type: "warning",
+          message: "Event can't be moved outside the timeline range.",
+          action: {
+            label: "Adjust Range",
+            onClick: () => {
+              setShowSettings(true);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              setTimeout(() => {
+                if (settingsPanelRef.current) {
+                  settingsPanelRef.current.classList.add("animate-pulse-highlight");
+                  setTimeout(() => settingsPanelRef.current?.classList.remove("animate-pulse-highlight"), 2000);
+                }
+              }, 100);
+            },
+          },
+        });
+      } else if (snapped === clamped && atBoundaryRef.current) {
+        atBoundaryRef.current = false;
+        if (boundaryNotifIdRef.current) {
+          dismissRef.current(boundaryNotifIdRef.current);
+          boundaryNotifIdRef.current = null;
+        }
+      }
 
       setDragTimeLabel(formatTime(minutesToTime(clamped)));
       setDragPreviewItems(buildPreview(item.id, clamped, items));
@@ -325,6 +370,7 @@ export default function TimelineView({ userId }: { userId: string }) {
       document.removeEventListener("mouseup", onEnd);
       document.removeEventListener("touchmove", onMove);
       document.removeEventListener("touchend", onEnd);
+      atBoundaryRef.current = false;
 
       if (!dragMovedRef.current) {
         setDragId(null); setDragTimeLabel(null); setDragPreviewItems(null);
@@ -424,7 +470,6 @@ export default function TimelineView({ userId }: { userId: string }) {
   };
 
   // Computed
-  const dEndMin = (activeTl?.end_hour ?? 24) * 60;
   const totalHeight = (dEndMin - dStartMin) * PIXELS_PER_MINUTE;
   const filteredItems = filterCategory === "All" ? items : items.filter(i => i.category === filterCategory);
   let displayItems = dragPreviewItems ? (filterCategory === "All" ? dragPreviewItems : dragPreviewItems.filter(i => i.category === filterCategory)) : filteredItems;
@@ -546,7 +591,7 @@ export default function TimelineView({ userId }: { userId: string }) {
         {activeTl?.date && <p className="text-sm text-subtle mb-3">{formatDateLong(activeTl.date)}</p>}
 
         {showSettings && (
-          <div className="bg-surface p-4 rounded-lg shadow border border-app-border mb-4">
+          <div ref={settingsPanelRef} className="bg-surface p-4 rounded-lg shadow border border-app-border mb-4">
             <h3 className="font-semibold text-heading mb-3">Timeline Settings</h3>
             <div className="flex gap-4 items-end flex-wrap">
               <div><label className="block text-xs font-semibold text-subtle uppercase mb-1">Date</label><input type="date" value={sDate} onChange={e => setSDate(e.target.value)} className="border border-app-border rounded-lg px-3 py-2 bg-surface text-heading" /></div>
