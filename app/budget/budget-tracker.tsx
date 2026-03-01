@@ -256,8 +256,8 @@ export default function BudgetTracker({ userId }: { userId: string }) {
     });
 
     return (
-      <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-48" style={{ minWidth: `${chartWidth}px` }} preserveAspectRatio="xMinYMid meet">
+      <div className="overflow-x-auto flex justify-center">
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-48 shrink-0" style={{ minWidth: `${chartWidth}px` }} preserveAspectRatio="xMinYMid meet">
           {/* Y-axis lines and labels */}
           {yLines.map(({ val, y }) => (
             <g key={val}>
