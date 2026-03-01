@@ -234,13 +234,13 @@ export default function BudgetTracker({ userId }: { userId: string }) {
       return <p className="text-center text-subtle py-8">No budget items yet.</p>;
     }
 
-    const items = budgetItems.slice(0, 10); // limit to 10 for readability
+    const items = budgetItems;
     const maxVal = Math.max(...items.map((i) => Math.max(parseFloat(i.estimated_cost) || 0, parseFloat(i.actual_cost) || 0)), 1);
 
     const barWidth = 24;
     const gap = 12;
     const groupWidth = barWidth * 2 + gap;
-    const chartWidth = items.length * groupWidth + 60;
+    const chartWidth = Math.max(items.length * groupWidth + 60, 300);
     const chartHeight = 180;
     const topPad = 10;
     const bottomPad = 50;
@@ -257,7 +257,7 @@ export default function BudgetTracker({ userId }: { userId: string }) {
 
     return (
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${Math.max(chartWidth, 300)} ${chartHeight}`} className="w-full h-48" preserveAspectRatio="xMinYMid meet">
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-48" style={{ minWidth: `${chartWidth}px` }} preserveAspectRatio="xMinYMid meet">
           {/* Y-axis lines and labels */}
           {yLines.map(({ val, y }) => (
             <g key={val}>
