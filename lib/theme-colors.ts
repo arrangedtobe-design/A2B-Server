@@ -2,6 +2,7 @@ export interface ThemeColorSet {
   timelineCategories: Record<string, string>;
   vendorPalette: string[];
   taskCategories: Record<string, string>;
+  priorityColors: Record<string, string>;
   roleColors: Record<string, string>;
   surfaces: {
     cardBg: string;
@@ -39,6 +40,11 @@ export const themes: Record<string, ThemeColorSet> = {
       Legal: "bg-red-100 text-red-700",
       Transportation: "bg-cyan-100 text-cyan-700",
       "Gifts & Favors": "bg-emerald-100 text-emerald-700",
+    },
+    priorityColors: {
+      low: "bg-blue-100 text-blue-700",
+      medium: "bg-amber-100 text-amber-700",
+      high: "bg-red-100 text-red-700",
     },
     roleColors: {
       owner: "bg-rose-100 text-rose-700",
@@ -80,6 +86,11 @@ export const themes: Record<string, ThemeColorSet> = {
       Legal: "bg-red-900/50 text-red-300",
       Transportation: "bg-cyan-900/50 text-cyan-300",
       "Gifts & Favors": "bg-emerald-900/50 text-emerald-300",
+    },
+    priorityColors: {
+      low: "bg-blue-900/50 text-blue-300",
+      medium: "bg-amber-900/50 text-amber-300",
+      high: "bg-red-900/50 text-red-300",
     },
     roleColors: {
       owner: "bg-rose-900/50 text-rose-300",
