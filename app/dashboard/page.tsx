@@ -84,6 +84,7 @@ export default function Dashboard() {
     { label: "Vendors", href: "/vendors", icon: "🏪", description: "Manage vendors" },
     { label: "Budget", href: "/budget", icon: "💰", description: "Track spending" },
     { label: "Wedding Team", href: "/members", icon: "💍", description: "Manage your team" },
+    { label: "RSVP Page", href: "/rsvp-editor", icon: "💌", description: "Design your RSVP" },
   ];
 
   const canManageMembers = membership?.role === "owner" || membership?.role === "partner" || membership?.role === "planner";
