@@ -372,10 +372,10 @@ export default function RsvpEditor({ userId }: { userId: string }) {
       {/* ── Top Bar ── */}
       <div className="sticky top-0 z-30 bg-surface border-b border-app-border px-4 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href="/dashboard" className="text-subtle hover:text-body text-sm shrink-0">
+          <Link href="/dashboard" className="text-rose-app hover:text-rose-app-hover text-sm shrink-0">
             &larr; Dashboard
           </Link>
-          <h1 className="text-lg font-bold text-heading truncate">RSVP Editor</h1>
+          <h1 className="text-2xl font-bold text-heading truncate">RSVP Editor</h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {notification && (

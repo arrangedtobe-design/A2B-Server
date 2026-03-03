@@ -1022,9 +1022,12 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
       <div className="h-screen flex flex-col overflow-hidden bg-page-bg">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-3 border-b border-app-border bg-surface shrink-0">
-          <h1 className="text-2xl font-bold text-heading">Seating Chart</h1>
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/dashboard" className="text-rose-app hover:text-rose-app-hover text-sm shrink-0">← Dashboard</Link>
+            <h1 className="text-2xl font-bold text-heading truncate">Seating Chart</h1>
+          </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {notification && (
               <span className="text-sm px-2 py-1 rounded text-rose-app">
                 {notification}
@@ -1059,9 +1062,6 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
               {saving ? "Saving..." : dirty ? "Save *" : "Saved"}
             </button>
             <ThemeSwitcher />
-            <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">
-              ← Dashboard
-            </Link>
           </div>
         </header>
 

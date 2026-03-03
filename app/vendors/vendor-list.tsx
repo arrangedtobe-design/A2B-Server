@@ -240,11 +240,13 @@ export default function VendorList({ userId }: { userId: string }) {
   return (
     <div className="min-h-screen bg-page-bg">
       <div className="max-w-5xl mx-auto p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-heading">Vendors</h1>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/dashboard" className="text-rose-app hover:text-rose-app-hover text-sm shrink-0">← Dashboard</Link>
+            <h1 className="text-2xl font-bold text-heading truncate">Vendors</h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <ThemeSwitcher />
-            <Link href="/dashboard" className="text-sm text-rose-app hover:text-rose-app-hover">← Dashboard</Link>
           </div>
         </div>
 
