@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SeatingTable, SeatingGuest, CanvasViewport, SeatPopoverData, CanvasSizePreset } from "@/lib/seating/types";
 import { CANVAS_SIZE_PRESETS } from "@/lib/seating/types";
 import { CanvasTable } from "./canvas-table";
@@ -13,6 +13,8 @@ interface CanvasPanelProps {
   selectedTableId: string | null;
   seatPopover: SeatPopoverData | null;
   dragInitial: string | null;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
   onViewportChange: (vp: CanvasViewport) => void;
   onTableRepositioned: (tableId: string, x: number, y: number) => void;
   onTableDragEnd: (tableId: string) => void;
@@ -21,6 +23,7 @@ interface CanvasPanelProps {
   onSelectTable: (tableId: string | null) => void;
   onSeatClick: (data: SeatPopoverData) => void;
   onRemoveAssignment: (guestId: string, partyMemberIndex: number | null) => void;
+  onDoubleClickCanvas: (posX: number, posY: number) => void;
 }
 
 const MIN_ZOOM = 0.3;
@@ -33,6 +36,8 @@ export function CanvasPanel({
   selectedTableId,
   seatPopover,
   dragInitial,
+  sidebarCollapsed,
+  onToggleSidebar,
   onViewportChange,
   onTableRepositioned,
   onTableDragEnd,
@@ -41,13 +46,16 @@ export function CanvasPanel({
   onSelectTable,
   onSeatClick,
   onRemoveAssignment,
+  onDoubleClickCanvas,
 }: CanvasPanelProps) {
   const sizePreset = CANVAS_SIZE_PRESETS[viewport.canvasSize];
   const CANVAS_W = sizePreset.w;
   const CANVAS_H = sizePreset.h;
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasPlaneRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{ startX: number; startY: number; origOX: number; origOY: number } | null>(null);
+  const initialFitDone = useRef(false);
   const [panning, setPanning] = useState(false);
 
   // Clamp offset so the canvas stays mostly within the viewport
@@ -122,6 +130,20 @@ export function CanvasPanel({
     [viewport, onViewportChange, onSelectTable, clampOffset],
   );
 
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target !== e.currentTarget && !(e.target as HTMLElement).dataset.canvasBg) return;
+      const plane = canvasPlaneRef.current;
+      if (!plane) return;
+      // getBoundingClientRect accounts for CSS transforms (translate + scale)
+      const planeRect = plane.getBoundingClientRect();
+      const posX = Math.max(0, Math.min(100, ((e.clientX - planeRect.left) / planeRect.width) * 100));
+      const posY = Math.max(0, Math.min(100, ((e.clientY - planeRect.top) / planeRect.height) * 100));
+      onDoubleClickCanvas(posX, posY);
+    },
+    [onDoubleClickCanvas],
+  );
+
   const fitToView = useCallback(() => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -168,6 +190,26 @@ export function CanvasPanel({
     });
   }, [tables, viewport, onViewportChange]);
 
+  // Center the floor plan on initial load
+  useEffect(() => {
+    if (initialFitDone.current || !containerRef.current) return;
+    // Wait for layout to settle before measuring container
+    const timer = setTimeout(() => {
+      if (!initialFitDone.current) {
+        initialFitDone.current = true;
+        fitToView();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [fitToView]);
+
+  // Re-center when sidebar is toggled (container width changes)
+  useEffect(() => {
+    if (!initialFitDone.current) return;
+    const timer = setTimeout(() => fitToView(), 50);
+    return () => clearTimeout(timer);
+  }, [sidebarCollapsed]);
+
   const zoomIn = () => onViewportChange({ ...viewport, zoom: Math.min(MAX_ZOOM, viewport.zoom + 0.15) });
   const zoomOut = () => onViewportChange({ ...viewport, zoom: Math.max(MIN_ZOOM, viewport.zoom - 0.15) });
 
@@ -181,6 +223,7 @@ export function CanvasPanel({
       className={`flex-1 relative overflow-hidden bg-page-bg ${panning ? "cursor-grabbing" : "cursor-default"}`}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
     >
       {/* Grid pattern background */}
       <div
@@ -204,6 +247,7 @@ export function CanvasPanel({
 
       {/* Canvas plane */}
       <div
+        ref={canvasPlaneRef}
         data-canvas-bg="true"
         className="absolute rounded-lg border border-app-border bg-surface"
         style={{
@@ -331,6 +375,15 @@ export function CanvasPanel({
           </button>
         </div>
       )}
+
+      {/* Sidebar toggle */}
+      <button
+        onClick={onToggleSidebar}
+        className="absolute top-4 left-4 hidden md:flex items-center justify-center w-8 h-8 rounded-lg border border-app-border bg-surface shadow-sm z-10 text-subtle hover:text-heading hover:bg-page-bg"
+        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+      >
+        {sidebarCollapsed ? "▶" : "◀"}
+      </button>
 
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex items-center gap-1 px-3 py-2 rounded-lg border border-app-border bg-surface shadow-sm z-10">

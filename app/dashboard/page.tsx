@@ -11,6 +11,8 @@ export default function Dashboard() {
   const [event, setEvent] = useState<any>(null);
   const [membership, setMembership] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [statsOpen, setStatsOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
@@ -56,6 +58,31 @@ export default function Dashboard() {
       setEvent(eventData);
       setMembership(memberData);
       setMembers(allMembers || []);
+
+      // Fetch stats in parallel
+      const [guestsRes, tasksRes, budgetRes, vendorsRes] = await Promise.all([
+        supabase.from("guests").select("rsvp_status").eq("event_id", eventId),
+        supabase.from("tasks").select("is_complete").eq("event_id", eventId),
+        supabase.from("budget_items").select("estimated_cost, actual_cost").eq("event_id", eventId),
+        supabase.from("vendors").select("id").eq("event_id", eventId),
+      ]);
+
+      const guestsList = guestsRes.data || [];
+      const tasksList = tasksRes.data || [];
+      const budgetList = budgetRes.data || [];
+
+      setStats({
+        guestsTotal: guestsList.length,
+        confirmed: guestsList.filter((g: any) => g.rsvp_status === "confirmed").length,
+        pending: guestsList.filter((g: any) => g.rsvp_status === "pending").length,
+        declined: guestsList.filter((g: any) => g.rsvp_status === "declined").length,
+        tasksTotal: tasksList.length,
+        tasksDone: tasksList.filter((t: any) => t.is_complete).length,
+        vendorsTotal: (vendorsRes.data || []).length,
+        budgetEstimated: budgetList.reduce((s: number, i: any) => s + (parseFloat(i.estimated_cost) || 0), 0),
+        budgetActual: budgetList.reduce((s: number, i: any) => s + (parseFloat(i.actual_cost) || 0), 0),
+      });
+
       setLoading(false);
     };
 
@@ -86,6 +113,7 @@ export default function Dashboard() {
     { label: "Wedding Team", href: "/members", icon: "💍", description: "Manage your team" },
     { label: "RSVP Page", href: "/rsvp-editor", icon: "💌", description: "Design your RSVP" },
     { label: "Seating Chart", href: "/seating", icon: "🪑", description: "Arrange your tables" },
+    { label: "Settings", href: "/settings", icon: "⚙️", description: "Event details & preferences" },
   ];
 
   const canManageMembers = membership?.role === "owner" || membership?.role === "partner" || membership?.role === "planner";
@@ -115,11 +143,60 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-4 mb-8">
+        <div className="mt-4 mb-4">
           <Link href="/members" className="text-sm text-rose-app hover:text-rose-app-hover">
             {members.length} member{members.length !== 1 ? "s" : ""} →
           </Link>
         </div>
+
+        {/* Collapsible Overview */}
+        {stats && (
+          <div className="mb-6">
+            <button
+              onClick={() => setStatsOpen(!statsOpen)}
+              className="flex items-center gap-1.5 text-sm font-medium text-heading mb-3 hover:text-rose-app transition-colors"
+            >
+              <span className="text-xs">{statsOpen ? "▾" : "▸"}</span>
+              Overview
+            </button>
+            {statsOpen && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-2xl font-bold text-heading">{stats.guestsTotal}</p>
+                    <p className="text-xs text-subtle">Guests</p>
+                  </div>
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.confirmed}</p>
+                    <p className="text-xs text-subtle">Confirmed</p>
+                  </div>
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</p>
+                    <p className="text-xs text-subtle">Pending</p>
+                  </div>
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.declined}</p>
+                    <p className="text-xs text-subtle">Declined</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-2xl font-bold text-heading">{stats.tasksDone}<span className="text-base font-normal text-subtle">/{stats.tasksTotal}</span></p>
+                    <p className="text-xs text-subtle">Tasks Done</p>
+                  </div>
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-2xl font-bold text-heading">{stats.vendorsTotal}</p>
+                    <p className="text-xs text-subtle">Vendors</p>
+                  </div>
+                  <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                    <p className="text-lg font-bold text-heading">${stats.budgetActual.toLocaleString()}</p>
+                    <p className="text-xs text-subtle">of ${stats.budgetEstimated.toLocaleString()} budget</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           {navItems.map((item) => (

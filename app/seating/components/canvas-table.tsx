@@ -355,7 +355,8 @@ export function CanvasTable({
   // If table surface is visually too small for the text, render label below
   // Fixtures always render text inside the box
   const visualWidth = dimensions.w * zoom;
-  const textFitsInside = fixture || visualWidth >= 90;
+  const visualHeight = dimensions.h * zoom;
+  const textFitsInside = fixture || (visualWidth >= 90 && visualHeight >= 50);
 
   const borderColor = isSelected
     ? "var(--color-rose-app)"
@@ -465,25 +466,46 @@ export function CanvasTable({
         )}
       </div>
 
-      {/* Label below element when zoomed out too far */}
-      {!textFitsInside && (
-        <div
-          className="absolute left-1/2 select-none pointer-events-none text-center whitespace-nowrap"
-          style={{
-            top: dimensions.h + 4,
-            transform: `translateX(-50%) scale(${1 / zoom}) rotate(${-table.rotation}deg)`,
-            transformOrigin: "top center",
-          }}
-        >
-          {fixture && <p className="text-lg">{fixtureIcon}</p>}
-          <p className="text-sm font-semibold text-heading">{table.name}</p>
-          {!fixture && (
-            <p className="text-xs text-subtle">
-              {guestCount}/{table.capacity}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Label above element when zoomed out too far */}
+      {!textFitsInside && (() => {
+        // Distance from table center to topmost seat edge (canvas px)
+        const maxUp = fixture
+          ? dimensions.h / 2
+          : Math.max(dimensions.h / 2, ...seatPositions.map((p) => -p.y + 14));
+        // Add a small gap in canvas px
+        const labelBottom = maxUp + 14;
+        return (
+          <div
+            className="absolute select-none pointer-events-none"
+            style={{
+              left: dimensions.w / 2,
+              top: dimensions.h / 2,
+              width: 0,
+              height: 0,
+              transform: `rotate(${-table.rotation}deg)`,
+            }}
+          >
+            <div
+              className="text-center whitespace-nowrap"
+              style={{
+                position: "absolute",
+                left: 0,
+                bottom: labelBottom,
+                transform: `translateX(-50%) scale(${1 / zoom})`,
+                transformOrigin: "bottom center",
+              }}
+            >
+              {fixture && <p className="text-lg">{fixtureIcon}</p>}
+              <p className="text-sm font-semibold text-heading">{table.name}</p>
+              {!fixture && (
+                <p className="text-xs text-subtle">
+                  {guestCount}/{table.capacity}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Seats — only for seating shapes */}
       {seatPositions.map((pos, i) => (

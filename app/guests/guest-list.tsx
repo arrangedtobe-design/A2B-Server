@@ -46,6 +46,7 @@ export default function GuestList({ userId }: { userId: string }) {
   const [editPartyMembers, setEditPartyMembers] = useState<PartyMember[]>([]);
   const [selectedGuests, setSelectedGuests] = useState<Set<string>>(new Set());
   const [mealOptions, setMealOptions] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showImportExport, setShowImportExport] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<{ rows: CsvRow[]; errors: CsvError[] } | null>(null);
@@ -66,11 +67,11 @@ export default function GuestList({ userId }: { userId: string }) {
     fetchGuests(eid);
   }, []);
 
-  // Clear selection and reset page on filter change
+  // Clear selection and reset page on filter or search change
   useEffect(() => {
     setSelectedGuests(new Set());
     setCurrentPage(1);
-  }, [filterStatus]);
+  }, [filterStatus, searchQuery]);
 
   const fetchGuests = async (eid: string) => {
     const [guestsRes, tokensRes, responsesRes, rsvpPageRes] = await Promise.all([
@@ -591,10 +592,20 @@ export default function GuestList({ userId }: { userId: string }) {
   const unsentCount = guests.filter((g) => !rsvpTokens[g.id]?.invite_sent_at && g.email).length;
 
   const filteredGuests = (() => {
-    if (filterStatus === "All") return guests;
-    if (filterStatus === "Invited") return guests.filter((g) => rsvpTokens[g.id]?.invite_sent_at);
-    if (filterStatus === "Not Invited") return guests.filter((g) => !rsvpTokens[g.id]?.invite_sent_at);
-    return guests.filter((g) => g.rsvp_status === filterStatus.toLowerCase());
+    let result = guests;
+    if (filterStatus === "Invited") result = result.filter((g) => rsvpTokens[g.id]?.invite_sent_at);
+    else if (filterStatus === "Not Invited") result = result.filter((g) => !rsvpTokens[g.id]?.invite_sent_at);
+    else if (filterStatus !== "All") result = result.filter((g) => g.rsvp_status === filterStatus.toLowerCase());
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((g) =>
+        g.name?.toLowerCase().includes(q) ||
+        g.email?.toLowerCase().includes(q) ||
+        g.party_members?.some((m: PartyMember) => m.name?.toLowerCase().includes(q))
+      );
+    }
+    return result;
   })();
 
   const totalPages = Math.max(1, Math.ceil(filteredGuests.length / PAGE_SIZE));
@@ -747,6 +758,15 @@ export default function GuestList({ userId }: { userId: string }) {
               : `Send All Invites${unsentCount ? ` (${unsentCount})` : ""}`}
           </button>
         </div>
+
+        {/* Search */}
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search guests..."
+          className="w-full border border-app-border rounded-lg px-3 py-2 mb-3 bg-surface text-heading text-sm placeholder:text-subtle"
+        />
 
         {/* RSVP Filters */}
         <div className="flex gap-2 mb-4 flex-wrap">

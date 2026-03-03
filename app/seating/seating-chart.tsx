@@ -55,11 +55,13 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
   const [seatPopover, setSeatPopover] = useState<SeatPopoverData | null>(null);
   const [hoveredDropId, setHoveredDropId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Undo
   const [undoStack, setUndoStack] = useState<SeatingState[]>([]);
 
   // Dialogs
+  const pendingPosition = useRef<{ x: number; y: number } | null>(null);
   const [tableDialog, setTableDialog] = useState<{ open: boolean; table: SeatingTable | null }>({
     open: false,
     table: null,
@@ -490,12 +492,13 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
         custom_width: null,
         custom_height: null,
         rotation: data.rotation,
-        position_x: 30 + Math.random() * 40,
-        position_y: 30 + Math.random() * 40,
+        position_x: pendingPosition.current?.x ?? (30 + Math.random() * 40),
+        position_y: pendingPosition.current?.y ?? (30 + Math.random() * 40),
         sort_order: tables.length,
       };
       setTables((prev) => [...prev, newTable]);
       setDirty(true);
+      pendingPosition.current = null;
     },
     [eventId, tables.length, pushUndo],
   );
@@ -1067,18 +1070,20 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
 
         {/* Two-panel layout */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          <ListPanel
-            tables={tables}
-            unassigned={unassigned}
-            tableGuests={tableGuests}
-            seatedCount={seatedCount}
-            totalCount={totalCount}
-            selectedTableId={selectedTableId}
-            onAddTable={() => setTableDialog({ open: true, table: null })}
-            onEditTable={(t) => setTableDialog({ open: true, table: t })}
-            onDeleteTable={deleteTable}
-            onRemoveAssignment={removeAssignment}
-          />
+          {!sidebarCollapsed && (
+            <ListPanel
+              tables={tables}
+              unassigned={unassigned}
+              tableGuests={tableGuests}
+              seatedCount={seatedCount}
+              totalCount={totalCount}
+              selectedTableId={selectedTableId}
+              onAddTable={() => setTableDialog({ open: true, table: null })}
+              onEditTable={(t) => setTableDialog({ open: true, table: t })}
+              onDeleteTable={deleteTable}
+              onRemoveAssignment={removeAssignment}
+            />
+          )}
           <CanvasPanel
             tables={tables}
             tableGuests={tableGuests}
@@ -1086,6 +1091,8 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
             selectedTableId={selectedTableId}
             seatPopover={seatPopover}
             dragInitial={activeDragPerson?.display_name.charAt(0).toUpperCase() || null}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
             onViewportChange={setViewport}
             onTableRepositioned={repositionTable}
             onTableDragEnd={handleTableDragEnd}
@@ -1094,6 +1101,10 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
             onSelectTable={handleSelectTable}
             onSeatClick={setSeatPopover}
             onRemoveAssignment={removeAssignment}
+            onDoubleClickCanvas={(posX, posY) => {
+              pendingPosition.current = { x: posX, y: posY };
+              setTableDialog({ open: true, table: null });
+            }}
           />
         </div>
       </div>
