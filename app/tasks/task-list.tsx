@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useThemeColors } from "@/lib/use-theme-colors";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { TASK_TEMPLATES } from "./task-template-data";
 
 const CATEGORIES = [
   "General", "Venue", "Catering", "Attire", "Flowers & Decor",
@@ -22,6 +23,10 @@ export default function TaskList({ userId }: { userId: string }) {
   const [owner, setOwner] = useState("");
   const [notes, setNotes] = useState("");
   const [priority, setPriority] = useState("");
+  const [subtasks, setSubtasks] = useState<{ title: string; is_complete: boolean }[]>([]);
+  const [subtaskInput, setSubtaskInput] = useState("");
+  const [contributors, setContributors] = useState<string[]>([]);
+  const [contributorInput, setContributorInput] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterOwner, setFilterOwner] = useState("All");
   const [filterPriority, setFilterPriority] = useState("All");
@@ -31,6 +36,8 @@ export default function TaskList({ userId }: { userId: string }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set());
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
@@ -89,6 +96,10 @@ export default function TaskList({ userId }: { userId: string }) {
     setOwner("");
     setNotes("");
     setPriority("");
+    setSubtasks([]);
+    setSubtaskInput("");
+    setContributors([]);
+    setContributorInput("");
     setEditingId(null);
     setShowForm(false);
   };
@@ -100,6 +111,10 @@ export default function TaskList({ userId }: { userId: string }) {
     setOwner(task.owner || "");
     setNotes(task.notes || "");
     setPriority(task.priority || "");
+    setSubtasks(Array.isArray(task.subtasks) ? task.subtasks : []);
+    setSubtaskInput("");
+    setContributors(Array.isArray(task.contributors) ? task.contributors : []);
+    setContributorInput("");
     setEditingId(task.id);
     setShowForm(true);
     setSelectedTaskId(null);
@@ -116,6 +131,8 @@ export default function TaskList({ userId }: { userId: string }) {
       owner: owner.trim() || null,
       notes: notes.trim() || null,
       priority: priority || null,
+      subtasks,
+      contributors,
     };
 
     if (editingId) {
@@ -150,6 +167,102 @@ export default function TaskList({ userId }: { userId: string }) {
     if (!eventId) return;
     await supabase.from("tasks").delete().eq("id", id);
     if (selectedTaskId === id) setSelectedTaskId(null);
+    fetchTasks(eventId);
+  };
+
+  const toggleSubtask = async (taskId: string, subtaskIndex: number) => {
+    if (!eventId) return;
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !Array.isArray(task.subtasks)) return;
+    const updated = task.subtasks.map((s: any, i: number) =>
+      i === subtaskIndex ? { ...s, is_complete: !s.is_complete } : s
+    );
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, subtasks: updated } : t));
+    await supabase.from("tasks").update({ subtasks: updated }).eq("id", taskId);
+  };
+
+  const addSubtask = () => {
+    const val = subtaskInput.trim();
+    if (!val) return;
+    setSubtasks(prev => [...prev, { title: val, is_complete: false }]);
+    setSubtaskInput("");
+  };
+
+  const removeSubtask = (index: number) => {
+    setSubtasks(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleFormSubtask = (index: number) => {
+    setSubtasks(prev => prev.map((s, i) => i === index ? { ...s, is_complete: !s.is_complete } : s));
+  };
+
+  const addContributor = () => {
+    const val = contributorInput.trim();
+    if (!val || contributors.includes(val)) return;
+    setContributors(prev => [...prev, val]);
+    setContributorInput("");
+  };
+
+  const removeContributor = (index: number) => {
+    setContributors(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const openTemplates = () => {
+    setSelectedTemplates(new Set());
+    setShowTemplates(true);
+    setShowForm(false);
+    setSelectedTaskId(null);
+  };
+
+  const toggleTemplate = (index: number) => {
+    setSelectedTemplates(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
+  };
+
+  const toggleCategoryTemplates = (cat: string) => {
+    const indices = TASK_TEMPLATES.map((t, i) => t.category === cat ? i : -1).filter(i => i >= 0);
+    const existingTitles = new Set(tasks.map(t => t.title.toLowerCase()));
+    const selectable = indices.filter(i => !existingTitles.has(TASK_TEMPLATES[i].title.toLowerCase()));
+    setSelectedTemplates(prev => {
+      const next = new Set(prev);
+      const allSelected = selectable.every(i => next.has(i));
+      if (allSelected) {
+        selectable.forEach(i => next.delete(i));
+      } else {
+        selectable.forEach(i => next.add(i));
+      }
+      return next;
+    });
+  };
+
+  const importTemplates = async () => {
+    if (!eventId || selectedTemplates.size === 0) return;
+    const maxOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.sort_order ?? 0)) : -1;
+    const rows = Array.from(selectedTemplates)
+      .sort((a, b) => a - b)
+      .map((idx, i) => {
+        const t = TASK_TEMPLATES[idx];
+        return {
+          title: t.title,
+          category: t.category,
+          priority: t.priority,
+          subtasks: t.subtasks || [],
+          contributors: [],
+          event_id: eventId,
+          sort_order: maxOrder + 1 + i,
+          is_complete: false,
+          owner: null,
+          due_date: null,
+          notes: null,
+        };
+      });
+    await supabase.from("tasks").insert(rows);
+    setShowTemplates(false);
+    setSelectedTemplates(new Set());
     fetchTasks(eventId);
   };
 
@@ -321,6 +434,34 @@ export default function TaskList({ userId }: { userId: string }) {
                 <p className="mt-1 bg-page-bg p-2 rounded text-body whitespace-pre-wrap">{selectedTask.notes}</p>
               </div>
             )}
+            {Array.isArray(selectedTask.subtasks) && selectedTask.subtasks.length > 0 && (
+              <div>
+                <span className="text-subtle">Subtasks</span>
+                <div className="mt-1 space-y-1">
+                  {selectedTask.subtasks.map((st: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 bg-page-bg rounded px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={st.is_complete}
+                        onChange={() => toggleSubtask(selectedTask.id, i)}
+                        className="h-4 w-4 rounded accent-rose-600 shrink-0"
+                      />
+                      <span className={`text-sm ${st.is_complete ? "line-through text-subtle" : "text-body"}`}>{st.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {Array.isArray(selectedTask.contributors) && selectedTask.contributors.length > 0 && (
+              <div>
+                <span className="text-subtle">Contributors</span>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {selectedTask.contributors.map((c: string, i: number) => (
+                    <span key={i} className="text-xs px-2 py-1 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">{c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex gap-2 mt-4 pt-3 border-t border-app-border">
             <button onClick={() => startEdit(selectedTask)} className="flex-1 bg-rose-app text-white py-2 rounded-lg hover:bg-rose-app-hover text-sm font-medium">Edit</button>
@@ -401,26 +542,81 @@ export default function TaskList({ userId }: { userId: string }) {
             </select>
           </div>
         </div>
-        {/* Mobile: stacked | Desktop: Notes + buttons row */}
-        <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
-          <div className="lg:flex-1">
-            <label className="block text-xs font-semibold text-subtle uppercase mb-1">Notes</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Additional details..."
-              rows={2}
-              className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading"
+        {/* Notes */}
+        <div>
+          <label className="block text-xs font-semibold text-subtle uppercase mb-1">Notes</label>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Additional details..."
+            rows={2}
+            className="w-full border border-app-border rounded-lg px-3 py-2 bg-surface text-heading"
+          />
+        </div>
+        {/* Subtasks builder */}
+        <div>
+          <label className="block text-xs font-semibold text-subtle uppercase mb-1">Subtasks</label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={subtaskInput}
+              onChange={e => setSubtaskInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSubtask(); } }}
+              placeholder="Add a subtask..."
+              className="flex-1 border border-app-border rounded-lg px-3 py-1.5 text-sm bg-surface text-heading"
             />
+            <button type="button" onClick={addSubtask} className="px-3 py-1.5 bg-rose-app text-white rounded-lg hover:bg-rose-app-hover text-sm font-medium">+</button>
           </div>
-          <div className="flex gap-2 shrink-0 lg:pb-0.5">
-            <button type="submit" className="flex-1 lg:flex-none bg-rose-app text-white px-5 py-2 rounded-lg hover:bg-rose-app-hover font-medium">
-              {editingId ? "Save Changes" : "Add Task"}
-            </button>
-            <button type="button" onClick={resetForm} className="px-4 py-2 border border-app-border rounded-lg text-body hover:bg-page-bg">
-              Cancel
-            </button>
+          {subtasks.length > 0 && (
+            <div className="space-y-1">
+              {subtasks.map((st, i) => (
+                <div key={i} className="flex items-center gap-2 bg-page-bg rounded px-2 py-1">
+                  <input
+                    type="checkbox"
+                    checked={st.is_complete}
+                    onChange={() => toggleFormSubtask(i)}
+                    className="h-4 w-4 rounded accent-rose-600 shrink-0"
+                  />
+                  <span className={`flex-1 text-sm ${st.is_complete ? "line-through text-subtle" : "text-body"}`}>{st.title}</span>
+                  <button type="button" onClick={() => removeSubtask(i)} className="text-subtle hover:text-red-500 text-sm">x</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Contributors builder */}
+        <div>
+          <label className="block text-xs font-semibold text-subtle uppercase mb-1">Contributors</label>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              value={contributorInput}
+              onChange={e => setContributorInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addContributor(); } }}
+              placeholder="Add a contributor..."
+              className="flex-1 border border-app-border rounded-lg px-3 py-1.5 text-sm bg-surface text-heading"
+            />
+            <button type="button" onClick={addContributor} className="px-3 py-1.5 bg-rose-app text-white rounded-lg hover:bg-rose-app-hover text-sm font-medium">+</button>
           </div>
+          {contributors.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {contributors.map((c, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+                  {c}
+                  <button type="button" onClick={() => removeContributor(i)} className="hover:text-red-500 font-bold">x</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Buttons */}
+        <div className="flex gap-2">
+          <button type="submit" className="flex-1 lg:flex-none bg-rose-app text-white px-5 py-2 rounded-lg hover:bg-rose-app-hover font-medium">
+            {editingId ? "Save Changes" : "Add Task"}
+          </button>
+          <button type="button" onClick={resetForm} className="px-4 py-2 border border-app-border rounded-lg text-body hover:bg-page-bg">
+            Cancel
+          </button>
         </div>
       </form>
     </div>
@@ -460,6 +656,12 @@ export default function TaskList({ userId }: { userId: string }) {
             className="bg-rose-app text-white px-4 py-2 rounded-lg hover:bg-rose-app-hover font-medium text-sm"
           >
             + Add Task
+          </button>
+          <button
+            onClick={openTemplates}
+            className="border border-app-border text-body px-4 py-2 rounded-lg hover:bg-surface font-medium text-sm"
+          >
+            Templates
           </button>
 
           <select
@@ -523,6 +725,114 @@ export default function TaskList({ userId }: { userId: string }) {
             {renderForm()}
           </div>
         )}
+
+        {/* Template picker modal */}
+        {showTemplates && (() => {
+          const existingTitles = new Set(tasks.map(t => t.title.toLowerCase()));
+          const groupedCategories = CATEGORIES.filter(cat =>
+            TASK_TEMPLATES.some(t => t.category === cat)
+          );
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowTemplates(false)}>
+              <div
+                className="w-full h-full lg:h-auto lg:max-h-[85vh] lg:max-w-2xl bg-surface lg:rounded-xl shadow-xl border border-app-border flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex justify-between items-center p-4 border-b border-app-border shrink-0">
+                  <h2 className="text-lg font-bold text-heading">Add from Templates</h2>
+                  <button onClick={() => setShowTemplates(false)} className="text-subtle hover:text-body text-xl">x</button>
+                </div>
+                {/* Scrollable body */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                  {groupedCategories.map(cat => {
+                    const items = TASK_TEMPLATES.map((t, i) => ({ ...t, _idx: i })).filter(t => t.category === cat);
+                    const selectable = items.filter(t => !existingTitles.has(t.title.toLowerCase()));
+                    const allSelected = selectable.length > 0 && selectable.every(t => selectedTemplates.has(t._idx));
+                    return (
+                      <div key={cat}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-heading">{cat}</h3>
+                          {selectable.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleCategoryTemplates(cat)}
+                              className="text-xs text-rose-app hover:text-rose-app-hover font-medium"
+                            >
+                              {allSelected ? "Deselect all" : "Select all"}
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {items.map(t => {
+                            const exists = existingTitles.has(t.title.toLowerCase());
+                            const checked = selectedTemplates.has(t._idx);
+                            return (
+                              <label
+                                key={t._idx}
+                                className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
+                                  exists
+                                    ? "opacity-40 cursor-not-allowed"
+                                    : checked
+                                      ? "bg-rose-50 dark:bg-rose-900/20"
+                                      : "hover:bg-page-bg"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={exists}
+                                  onChange={() => toggleTemplate(t._idx)}
+                                  className="h-4 w-4 rounded accent-rose-600 shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <span className={`text-sm ${exists ? "line-through text-subtle" : "text-body"}`}>{t.title}</span>
+                                  {exists && <span className="text-xs text-subtle ml-2">(already added)</span>}
+                                </div>
+                                <div className="flex gap-1.5 shrink-0">
+                                  <span
+                                    className="text-xs px-2 py-0.5 rounded-full"
+                                    style={{
+                                      backgroundColor: t.priority === "High" ? '#fee2e2' : t.priority === "Medium" ? '#fef3c7' : '#dbeafe',
+                                      color: t.priority === "High" ? '#b91c1c' : t.priority === "Medium" ? '#92400e' : '#1d4ed8',
+                                    }}
+                                  >
+                                    {t.priority}
+                                  </span>
+                                  {t.subtasks && t.subtasks.length > 0 && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                                      {t.subtasks.length} subtasks
+                                    </span>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Sticky footer */}
+                <div className="border-t border-app-border p-4 shrink-0 flex items-center justify-between">
+                  <span className="text-sm text-subtle">{selectedTemplates.size} item{selectedTemplates.size !== 1 ? "s" : ""} selected</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowTemplates(false)} className="px-4 py-2 border border-app-border rounded-lg text-body hover:bg-page-bg text-sm">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={importTemplates}
+                      disabled={selectedTemplates.size === 0}
+                      className="px-5 py-2 bg-rose-app text-white rounded-lg hover:bg-rose-app-hover font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Import Selected
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="flex gap-6">
           {/* Task List */}
@@ -620,6 +930,16 @@ export default function TaskList({ userId }: { userId: string }) {
                               {task.due_date}
                             </span>
                           )}
+                          {Array.isArray(task.subtasks) && task.subtasks.length > 0 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                              {task.subtasks.filter((s: any) => s.is_complete).length}/{task.subtasks.length}
+                            </span>
+                          )}
+                          {Array.isArray(task.contributors) && task.contributors.length > 0 && task.contributors.map((c: string, ci: number) => (
+                            <span key={`c-${ci}`} className="text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+                              {c}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -670,6 +990,34 @@ export default function TaskList({ userId }: { userId: string }) {
                             <div>
                               <span className="text-subtle">Notes</span>
                               <p className="mt-1 bg-page-bg p-2 rounded text-body whitespace-pre-wrap">{selectedTask.notes}</p>
+                            </div>
+                          )}
+                          {Array.isArray(selectedTask.subtasks) && selectedTask.subtasks.length > 0 && (
+                            <div>
+                              <span className="text-subtle">Subtasks</span>
+                              <div className="mt-1 space-y-1">
+                                {selectedTask.subtasks.map((st: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-2 bg-page-bg rounded px-2 py-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={st.is_complete}
+                                      onChange={() => toggleSubtask(selectedTask.id, i)}
+                                      className="h-4 w-4 rounded accent-rose-600 shrink-0"
+                                    />
+                                    <span className={`text-sm ${st.is_complete ? "line-through text-subtle" : "text-body"}`}>{st.title}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {Array.isArray(selectedTask.contributors) && selectedTask.contributors.length > 0 && (
+                            <div>
+                              <span className="text-subtle">Contributors</span>
+                              <div className="mt-1 flex flex-wrap gap-1.5">
+                                {selectedTask.contributors.map((c: string, i: number) => (
+                                  <span key={i} className="text-xs px-2 py-1 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">{c}</span>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>

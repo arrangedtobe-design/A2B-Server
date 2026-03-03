@@ -288,6 +288,25 @@ export function RsvpFormRenderer({
             </div>
           )}
 
+          {/* Dietary notes for primary guest */}
+          {formConfig.showDietaryNotes && (
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: theme.colors.heading }}
+              >
+                Dietary Restrictions or Allergies
+              </label>
+              <textarea
+                value={dietaryNotes}
+                onChange={(e) => setDietaryNotes(e.target.value)}
+                placeholder="Any dietary needs we should know about?"
+                rows={2}
+                style={{ ...inputStyle, resize: "vertical" as const }}
+              />
+            </div>
+          )}
+
           {/* Party members section */}
           {partyMembers.length > 0 && (
             <div>
@@ -386,6 +405,40 @@ export function RsvpFormRenderer({
                             ))}
                           </select>
                         )}
+                      {pr.attending === "coming" && formConfig.showDietaryNotes && (
+                        <input
+                          type="text"
+                          value={pr.dietary_notes || ""}
+                          onChange={(e) =>
+                            updatePartyMember(index, {
+                              dietary_notes: e.target.value || null,
+                            })
+                          }
+                          placeholder="Dietary restrictions / allergies"
+                          className="mt-2"
+                          style={{
+                            ...inputStyle,
+                            padding: "6px 10px",
+                            fontSize: "13px",
+                          }}
+                        />
+                      )}
+                      {pr.attending === "coming" && (
+                        <label
+                          className="flex items-center gap-2 mt-2 cursor-pointer"
+                          style={{ fontSize: "13px", color: theme.colors.text }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={pr.needs_highchair || false}
+                            onChange={(e) =>
+                              updatePartyMember(index, { needs_highchair: e.target.checked })
+                            }
+                            style={{ accentColor: theme.colors.accent }}
+                          />
+                          Needs highchair
+                        </label>
+                      )}
                     </div>
                   );
                 })}
@@ -394,25 +447,6 @@ export function RsvpFormRenderer({
           )}
 
           {/* Plus one removed — party members are managed by admin in the guest list */}
-
-          {/* Dietary notes */}
-          {formConfig.showDietaryNotes && (
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: theme.colors.heading }}
-              >
-                Dietary Restrictions or Allergies
-              </label>
-              <textarea
-                value={dietaryNotes}
-                onChange={(e) => setDietaryNotes(e.target.value)}
-                placeholder="Any dietary needs we should know about?"
-                rows={2}
-                style={{ ...inputStyle, resize: "vertical" as const }}
-              />
-            </div>
-          )}
 
           {/* Custom questions */}
           {formConfig.customQuestions.map((q) => (

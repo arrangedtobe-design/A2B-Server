@@ -11,6 +11,9 @@ export default function EventDashboard({ memberships, userId }: { memberships: a
   const [weddingDate, setWeddingDate] = useState("");
   const [venue, setVenue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingDemo, setIsCreatingDemo] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -45,6 +48,51 @@ export default function EventDashboard({ memberships, userId }: { memberships: a
   const selectEvent = (eventId: string) => {
     localStorage.setItem("activeEventId", eventId);
     router.push("/dashboard");
+  };
+
+  const handleCreateDemo = async () => {
+    if (!confirm("This will create a demo wedding with sample guests, vendors, tasks, and budget. Continue?")) return;
+    setIsCreatingDemo(true);
+    try {
+      const res = await fetch("/api/seed-mock-wedding", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("Error creating demo: " + (data.error || "Unknown error"));
+        return;
+      }
+      localStorage.setItem("activeEventId", data.eventId);
+      router.refresh();
+    } catch {
+      alert("Failed to create demo wedding");
+    } finally {
+      setIsCreatingDemo(false);
+    }
+  };
+
+  const handleDelete = async (eventId: string) => {
+    setDeletingId(eventId);
+    try {
+      const res = await fetch("/api/delete-wedding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert("Error deleting: " + (data.error || "Unknown error"));
+        return;
+      }
+      // Clear active event if it was the deleted one
+      if (localStorage.getItem("activeEventId") === eventId) {
+        localStorage.removeItem("activeEventId");
+      }
+      router.refresh();
+    } catch {
+      alert("Failed to delete wedding");
+    } finally {
+      setDeletingId(null);
+      setConfirmDelete(null);
+    }
   };
 
   const handleSignOut = async () => {
@@ -84,36 +132,79 @@ export default function EventDashboard({ memberships, userId }: { memberships: a
             <h2 className="text-xl font-semibold text-heading mb-4">Your Weddings</h2>
             <div className="space-y-3">
               {memberships.map((m: any) => (
-                <button
+                <div
                   key={m.event_id}
-                  onClick={() => selectEvent(m.event_id)}
-                  className="w-full text-left bg-surface p-4 rounded-lg shadow hover:shadow-md transition-shadow border border-app-border"
+                  className="bg-surface rounded-lg shadow hover:shadow-md transition-shadow border border-app-border"
                 >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-semibold text-heading">{m.events.name}</p>
-                      {m.events.wedding_date && (
-                        <p className="text-sm text-subtle">
-                          {new Date(m.events.wedding_date + "T00:00:00").toLocaleDateString()}
-                        </p>
-                      )}
-                      {m.events.venue && <p className="text-sm text-subtle">{m.events.venue}</p>}
+                  <button
+                    onClick={() => selectEvent(m.event_id)}
+                    className="w-full text-left p-4"
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-heading">{m.events.name}</p>
+                        {m.events.wedding_date && (
+                          <p className="text-sm text-subtle">
+                            {new Date(m.events.wedding_date + "T00:00:00").toLocaleDateString()}
+                          </p>
+                        )}
+                        {m.events.venue && <p className="text-sm text-subtle">{m.events.venue}</p>}
+                      </div>
+                      <span className="text-xs bg-rose-light-bg text-rose-light-text px-2 py-1 rounded-full">{m.role}</span>
                     </div>
-                    <span className="text-xs bg-rose-light-bg text-rose-light-text px-2 py-1 rounded-full">{m.role}</span>
-                  </div>
-                </button>
+                  </button>
+
+                  {m.role === "owner" && (
+                    <div className="px-4 pb-3">
+                      {confirmDelete === m.event_id ? (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-red-600 dark:text-red-400 font-medium">Delete this wedding and all its data?</span>
+                          <button
+                            onClick={() => handleDelete(m.event_id)}
+                            disabled={deletingId === m.event_id}
+                            className="px-3 py-1 rounded bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {deletingId === m.event_id ? "Deleting..." : "Yes, Delete"}
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="px-3 py-1 rounded border border-app-border text-body text-xs hover:bg-page-bg"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(m.event_id); }}
+                          className="text-xs text-subtle hover:text-red-500"
+                        >
+                          Delete wedding
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>
         )}
 
         {!showCreate ? (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="w-full bg-rose-app text-white py-3 rounded-lg hover:bg-rose-app-hover font-medium"
-          >
-            + Create New Wedding
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={() => setShowCreate(true)}
+              className="w-full bg-rose-app text-white py-3 rounded-lg hover:bg-rose-app-hover font-medium"
+            >
+              + Create New Wedding
+            </button>
+            <button
+              onClick={handleCreateDemo}
+              disabled={isCreatingDemo}
+              className="w-full border border-app-border text-body py-3 rounded-lg hover:bg-surface font-medium disabled:opacity-50"
+            >
+              {isCreatingDemo ? "Creating Demo..." : "Try a Demo Wedding"}
+            </button>
+          </div>
         ) : (
           <div className="bg-surface p-6 rounded-lg shadow border border-app-border">
             <h2 className="text-xl font-semibold text-heading mb-4">Create Your Wedding</h2>

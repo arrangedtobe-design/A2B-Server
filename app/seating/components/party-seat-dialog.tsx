@@ -2,6 +2,7 @@
 
 interface PartySeatDialogProps {
   guestName: string;
+  draggedPersonName: string;
   partySize: number;
   tableName: string;
   availableSeats: number;
@@ -12,6 +13,7 @@ interface PartySeatDialogProps {
 
 export function PartySeatDialog({
   guestName,
+  draggedPersonName,
   partySize,
   tableName,
   availableSeats,
@@ -47,7 +49,7 @@ export function PartySeatDialog({
             onClick={onSeatOne}
             className="w-full py-2.5 px-4 text-sm rounded-lg font-medium border border-app-border text-heading"
           >
-            Just {guestName}
+            Just {draggedPersonName}
           </button>
           <button
             onClick={onCancel}

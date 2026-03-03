@@ -58,7 +58,7 @@ export interface GuestRecord {
   email: string | null;
   rsvp_status: string;
   meal_preference: string | null;
-  party_members: { name: string; label: string }[] | null;
+  party_members: { name: string; label: string; needs_highchair?: boolean }[] | null;
 }
 
 export interface SeatingGuest {
@@ -66,6 +66,8 @@ export interface SeatingGuest {
   party_member_index: number | null;
   display_name: string;
   meal_preference: string | null;
+  dietary_notes: string | null;
+  needs_highchair: boolean;
   rsvp_status: string;
   party_label: string | null;
   party_head_name: string;

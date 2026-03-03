@@ -68,6 +68,8 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
     open: boolean;
     guestId: string;
     tableId: string;
+    draggedPmi: number | null;
+    draggedPersonName: string;
   } | null>(null);
 
   // Drag state
@@ -84,7 +86,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
   const remoteDragTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // RSVP responses (for party member meal preferences)
-  const [rsvpResponses, setRsvpResponses] = useState<Record<string, { party_responses?: { name: string; attending: string; meal_preference?: string | null }[] | null }>>({});
+  const [rsvpResponses, setRsvpResponses] = useState<Record<string, { dietary_notes?: string | null; party_responses?: { name: string; attending: string; meal_preference?: string | null; dietary_notes?: string | null; needs_highchair?: boolean }[] | null }>>({});
 
   // Track deleted table IDs for save
   const deletedTableIdsRef = useRef<string[]>([]);
@@ -144,7 +146,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
           .eq("event_id", eid),
         supabase
           .from("rsvp_responses")
-          .select("guest_id, party_responses")
+          .select("guest_id, dietary_notes, party_responses")
           .eq("event_id", eid),
       ]);
       setTables(tablesRes.data || []);
@@ -152,7 +154,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
       setGuests(guestsRes.data || []);
 
       // Index rsvp responses by guest_id
-      const rsvpMap: Record<string, { party_responses?: { name: string; attending: string; meal_preference?: string | null }[] | null }> = {};
+      const rsvpMap: Record<string, { dietary_notes?: string | null; party_responses?: { name: string; attending: string; meal_preference?: string | null; dietary_notes?: string | null; needs_highchair?: boolean }[] | null }> = {};
       for (const r of rsvpRes.data || []) {
         rsvpMap[r.guest_id] = r;
       }
@@ -256,25 +258,31 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
     const result: SeatingGuest[] = [];
     for (const g of guests) {
       const partySize = 1 + (g.party_members?.length || 0);
+      const rsvp = rsvpResponses[g.id];
       result.push({
         guest_id: g.id,
         party_member_index: null,
         display_name: g.name,
         meal_preference: g.meal_preference,
+        dietary_notes: rsvp?.dietary_notes || null,
+        needs_highchair: false,
         rsvp_status: g.rsvp_status,
         party_label: null,
         party_head_name: g.name,
         party_size: partySize,
       });
       if (g.party_members) {
-        const rsvp = rsvpResponses[g.id];
         g.party_members.forEach((pm, i) => {
           const partyMeal = rsvp?.party_responses?.[i]?.meal_preference || null;
+          const partyDietary = rsvp?.party_responses?.[i]?.dietary_notes || null;
+          const needsHighchair = rsvp?.party_responses?.[i]?.needs_highchair ?? pm.needs_highchair ?? false;
           result.push({
             guest_id: g.id,
             party_member_index: i,
             display_name: pm.name || `${g.name}'s ${pm.label}`,
             meal_preference: partyMeal,
+            dietary_notes: partyDietary,
+            needs_highchair: needsHighchair,
             rsvp_status: g.rsvp_status,
             party_label: pm.label,
             party_head_name: g.name,
@@ -739,11 +747,16 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
       }
 
       const guest = guests.find((g) => g.id === guestId);
-      if (pmi === null && guest?.party_members && guest.party_members.length > 0) {
+      if (guest?.party_members && guest.party_members.length > 0) {
+        const draggedPerson = allPersons.find(
+          (p) => p.guest_id === guestId && p.party_member_index === pmi,
+        );
         setPartyDialog({
           open: true,
           guestId,
           tableId: targetTableId,
+          draggedPmi: pmi,
+          draggedPersonName: draggedPerson?.display_name || guest.name,
         });
         return;
       }
@@ -760,7 +773,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
 
       assignPerson(guestId, pmi, targetTableId, targetSeatIndex);
     },
-    [tables, assignments, guests, activeDragPerson, assignPerson, removeAssignment, flash, userId, parseDragId],
+    [tables, assignments, guests, allPersons, activeDragPerson, assignPerson, removeAssignment, flash, userId, parseDragId],
   );
 
   // ── Party dialog handlers ──
@@ -779,7 +792,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
       setPartyDialog(null);
       return;
     }
-    assignPerson(partyDialog.guestId, null, partyDialog.tableId);
+    assignPerson(partyDialog.guestId, partyDialog.draggedPmi, partyDialog.tableId);
     setPartyDialog(null);
   }, [partyDialog, tables, assignments, assignPerson, flash]);
 
@@ -795,9 +808,9 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
         (a) => `${a.guest_id}::${a.party_member_index === null ? "primary" : a.party_member_index}`,
       ),
     );
-    const confirmedGuests = guests.filter((g) => g.rsvp_status === "confirmed");
+    const seatable = guests.filter((g) => g.rsvp_status !== "declined");
 
-    for (const guest of confirmedGuests) {
+    for (const guest of seatable) {
       const partyPersons = allPersons.filter(
         (p) =>
           p.guest_id === guest.id &&
@@ -977,6 +990,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
     const currentCount = assignments.filter((a) => a.table_id === table.id).length;
     return {
       guestName: guest.name,
+      draggedPersonName: partyDialog.draggedPersonName,
       partySize,
       tableName: table.name,
       availableSeats: table.capacity - currentCount,
@@ -1026,7 +1040,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
             <button
               onClick={autoSeat}
               className="text-sm px-3 py-1.5 rounded-lg border border-app-border text-body hover:bg-page-bg"
-              title="Auto-assign unassigned confirmed guests"
+              title="Auto-assign all unassigned guests (excludes declined)"
             >
               Auto-seat
             </button>
@@ -1115,6 +1129,7 @@ export default function SeatingChart({ userId }: SeatingChartProps) {
       {partyDialog && partyDialogData && (
         <PartySeatDialog
           guestName={partyDialogData.guestName}
+          draggedPersonName={partyDialogData.draggedPersonName}
           partySize={partyDialogData.partySize}
           tableName={partyDialogData.tableName}
           availableSeats={partyDialogData.availableSeats}

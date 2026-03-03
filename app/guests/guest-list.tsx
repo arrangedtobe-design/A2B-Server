@@ -8,6 +8,7 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 interface PartyMember {
   name: string;
   label: string;
+  needs_highchair?: boolean;
 }
 
 export default function GuestList({ userId }: { userId: string }) {
@@ -28,6 +29,9 @@ export default function GuestList({ userId }: { userId: string }) {
   const [editEmail, setEditEmail] = useState("");
   const [editPartyMembers, setEditPartyMembers] = useState<PartyMember[]>([]);
   const [selectedGuests, setSelectedGuests] = useState<Set<string>>(new Set());
+  const [mealOptions, setMealOptions] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
   const router = useRouter();
   const supabase = createClient();
 
@@ -41,13 +45,14 @@ export default function GuestList({ userId }: { userId: string }) {
     fetchGuests(eid);
   }, []);
 
-  // Clear selection on filter change
+  // Clear selection and reset page on filter change
   useEffect(() => {
     setSelectedGuests(new Set());
+    setCurrentPage(1);
   }, [filterStatus]);
 
   const fetchGuests = async (eid: string) => {
-    const [guestsRes, tokensRes, responsesRes] = await Promise.all([
+    const [guestsRes, tokensRes, responsesRes, rsvpPageRes] = await Promise.all([
       supabase
         .from("guests")
         .select("*")
@@ -61,9 +66,16 @@ export default function GuestList({ userId }: { userId: string }) {
         .from("rsvp_responses")
         .select("*")
         .eq("event_id", eid),
+      supabase
+        .from("rsvp_pages")
+        .select("form_config")
+        .eq("event_id", eid)
+        .maybeSingle(),
     ]);
 
     setGuests(guestsRes.data || []);
+    const opts = rsvpPageRes.data?.form_config?.mealOptions;
+    if (Array.isArray(opts) && opts.length > 0) setMealOptions(opts);
 
     const tokensByGuest: Record<string, any> = {};
     for (const t of tokensRes.data || []) {
@@ -130,7 +142,7 @@ export default function GuestList({ userId }: { userId: string }) {
   const updatePartyResponse = async (
     guestId: string,
     index: number,
-    updates: { attending?: string; meal_preference?: string; name?: string },
+    updates: { attending?: string; meal_preference?: string; dietary_notes?: string; name?: string; needs_highchair?: boolean },
   ) => {
     if (!eventId) return;
     const existing = rsvpResponses[guestId];
@@ -359,6 +371,10 @@ export default function GuestList({ userId }: { userId: string }) {
     return guests.filter((g) => g.rsvp_status === filterStatus.toLowerCase());
   })();
 
+  const totalPages = Math.max(1, Math.ceil(filteredGuests.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedGuests = filteredGuests.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   const inviteStatusStyles: Record<string, string> = {
     "Not Sent": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
     "Invited": "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -456,6 +472,15 @@ export default function GuestList({ userId }: { userId: string }) {
                     placeholder="Name (optional)"
                     className="flex-1 border border-app-border rounded px-2 py-1.5 text-sm bg-surface text-heading"
                   />
+                  <label className="flex items-center gap-1 text-xs text-subtle whitespace-nowrap cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={member.needs_highchair || false}
+                      onChange={(e) => updatePartyMember(index, { needs_highchair: e.target.checked })}
+                      className="w-3 h-3 rounded"
+                    />
+                    Highchair
+                  </label>
                   <button
                     type="button"
                     onClick={() => removePartyMember(index)}
@@ -506,27 +531,34 @@ export default function GuestList({ userId }: { userId: string }) {
           ))}
         </div>
 
-        {/* Select All */}
+        {/* Select All + Page Info */}
         {filteredGuests.length > 0 && (
-          <div className="flex items-center gap-2 mb-2">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-subtle">
-              <input
-                type="checkbox"
-                checked={selectedGuests.size === filteredGuests.length && filteredGuests.length > 0}
-                onChange={toggleSelectAll}
-                className="w-3.5 h-3.5 rounded"
-              />
-              Select all ({filteredGuests.length})
-            </label>
-            {selectedGuests.size > 0 && (
-              <span className="text-xs text-subtle">· {selectedGuests.size} selected</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-subtle">
+                <input
+                  type="checkbox"
+                  checked={selectedGuests.size === filteredGuests.length && filteredGuests.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-3.5 h-3.5 rounded"
+                />
+                Select all ({filteredGuests.length})
+              </label>
+              {selectedGuests.size > 0 && (
+                <span className="text-xs text-subtle">· {selectedGuests.size} selected</span>
+              )}
+            </div>
+            {totalPages > 1 && (
+              <span className="text-xs text-subtle">
+                {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredGuests.length)} of {filteredGuests.length}
+              </span>
             )}
           </div>
         )}
 
         {/* Guest List */}
         <div className="space-y-2">
-          {filteredGuests.map((guest) => {
+          {paginatedGuests.map((guest) => {
             const inviteStatus = getInviteStatus(guest.id);
             const isBusy = busyGuests.has(guest.id);
             const isCopied = copiedId === guest.id;
@@ -599,6 +631,19 @@ export default function GuestList({ userId }: { userId: string }) {
                                 placeholder="Name"
                                 className="flex-1 border border-app-border rounded px-1.5 py-1 text-xs bg-surface text-heading"
                               />
+                              <label className="flex items-center gap-1 text-[11px] text-subtle whitespace-nowrap cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={member.needs_highchair || false}
+                                  onChange={(e) => {
+                                    setEditPartyMembers((prev) =>
+                                      prev.map((m, i) => (i === index ? { ...m, needs_highchair: e.target.checked } : m)),
+                                    );
+                                  }}
+                                  className="w-3 h-3 rounded"
+                                />
+                                Highchair
+                              </label>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -677,13 +722,26 @@ export default function GuestList({ userId }: { userId: string }) {
                         <option value="declined">Declined</option>
                       </select>
                       {guest.rsvp_status !== "declined" && (
-                        <input
-                          type="text"
-                          value={guest.meal_preference || ""}
-                          onChange={(e) => updateMeal(guest.id, e.target.value)}
-                          placeholder="Meal preference"
-                          className="text-xs border border-app-border rounded px-2 py-1 flex-1 bg-surface text-heading"
-                        />
+                        mealOptions.length > 0 ? (
+                          <select
+                            value={guest.meal_preference || ""}
+                            onChange={(e) => updateMeal(guest.id, e.target.value)}
+                            className="text-xs border border-app-border rounded px-2 py-1 flex-1 bg-surface text-heading"
+                          >
+                            <option value="">Meal preference</option>
+                            {mealOptions.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={guest.meal_preference || ""}
+                            onChange={(e) => updateMeal(guest.id, e.target.value)}
+                            placeholder="Meal preference"
+                            className="text-xs border border-app-border rounded px-2 py-1 flex-1 bg-surface text-heading"
+                          />
+                        )
                       )}
                     </div>
 
@@ -755,14 +813,43 @@ export default function GuestList({ userId }: { userId: string }) {
                                 <option value="unsure">Unsure</option>
                               </select>
                               {pr.attending === "coming" && (
-                                <input
-                                  type="text"
-                                  value={pr.meal_preference || ""}
-                                  onChange={(e) => updatePartyResponse(guest.id, i, { meal_preference: e.target.value })}
-                                  placeholder="Meal"
-                                  className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading w-24"
-                                />
+                                mealOptions.length > 0 ? (
+                                  <select
+                                    value={pr.meal_preference || ""}
+                                    onChange={(e) => updatePartyResponse(guest.id, i, { meal_preference: e.target.value || null })}
+                                    className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading"
+                                  >
+                                    <option value="">Meal</option>
+                                    {mealOptions.map((opt) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={pr.meal_preference || ""}
+                                    onChange={(e) => updatePartyResponse(guest.id, i, { meal_preference: e.target.value })}
+                                    placeholder="Meal"
+                                    className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading w-24"
+                                  />
+                                )
                               )}
+                              <input
+                                type="text"
+                                value={pr.dietary_notes || ""}
+                                onChange={(e) => updatePartyResponse(guest.id, i, { dietary_notes: e.target.value })}
+                                placeholder="Dietary"
+                                className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading w-24"
+                              />
+                              <label className="flex items-center gap-1 text-[11px] text-subtle whitespace-nowrap cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={pr.needs_highchair || false}
+                                  onChange={(e) => updatePartyResponse(guest.id, i, { needs_highchair: e.target.checked })}
+                                  className="w-3 h-3 rounded"
+                                />
+                                Highchair
+                              </label>
                             </div>
                           ))}
                         </div>
@@ -794,10 +881,43 @@ export default function GuestList({ userId }: { userId: string }) {
               </div>
             );
           })}
-          {filteredGuests.length === 0 && (
+          {paginatedGuests.length === 0 && (
             <p className="text-center text-subtle py-8">No guests yet. Add one above!</p>
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              className="px-3 py-1.5 text-sm rounded-lg border border-app-border text-body hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Prev
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`w-8 h-8 text-sm rounded-lg font-medium ${
+                  page === safePage
+                    ? "bg-rose-app text-white"
+                    : "border border-app-border text-body hover:bg-surface"
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              className="px-3 py-1.5 text-sm rounded-lg border border-app-border text-body hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )}
 
         {/* Floating selection bar */}
         {selectedGuests.size > 0 && (

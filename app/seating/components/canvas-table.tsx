@@ -152,6 +152,22 @@ function SeatDot({
               : ""}
       </span>
 
+      {/* Highchair badge */}
+      {guest?.needs_highchair && !isDragging && (
+        <span
+          className="absolute pointer-events-none"
+          style={{
+            bottom: -2,
+            right: -2,
+            fontSize: 10,
+            lineHeight: 1,
+            transform: rotation ? `rotate(${-rotation}deg)` : undefined,
+          }}
+        >
+          🪑
+        </span>
+      )}
+
       {/* Hover tooltip — counter-rotate so it always appears above in screen space */}
       {showTooltip && guest && !isDragging && (
         <div
@@ -179,6 +195,12 @@ function SeatDot({
             )}
             {guest.meal_preference && (
               <p className="text-[10px] text-subtle">Meal: {guest.meal_preference}</p>
+            )}
+            {guest.dietary_notes && (
+              <p className="text-[10px] text-subtle">⚠ Dietary: {guest.dietary_notes}</p>
+            )}
+            {guest.needs_highchair && (
+              <p className="text-[10px] text-subtle">🪑 Needs highchair</p>
             )}
             <div
               className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0"

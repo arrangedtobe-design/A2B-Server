@@ -120,28 +120,45 @@ export function SeatingPreview({
 
                       {/* Guest list */}
                       <div className="px-3 py-2 space-y-0.5">
-                        {guests.map((g) => (
+                        {guests.map((g) => {
+                          const headAtSameTable = g.party_member_index !== null &&
+                            guests.some((o) => o.guest_id === g.guest_id && o.party_member_index === null);
+                          return (
                           <div
                             key={`${g.guest_id}-${g.party_member_index}`}
                             className="flex items-center gap-1.5 text-xs"
                           >
                             <span
                               className={`flex-1 truncate ${
-                                g.party_member_index !== null ? "pl-3 text-gray-600" : "font-medium"
+                                g.party_member_index !== null && headAtSameTable ? "pl-3 text-gray-600" : "font-medium"
                               }`}
                             >
-                              {g.party_member_index !== null && (
+                              {g.party_member_index !== null && headAtSameTable && (
                                 <span className="text-gray-400 mr-1">└</span>
                               )}
                               {g.display_name}
+                              {g.party_member_index !== null && !headAtSameTable && (
+                                <span className="text-gray-400"> (Guest of {g.party_head_name})</span>
+                              )}
                             </span>
+                            {g.needs_highchair && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">
+                                🪑 Highchair
+                              </span>
+                            )}
                             {g.meal_preference && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">
                                 {g.meal_preference}
                               </span>
                             )}
+                            {g.dietary_notes && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 shrink-0">
+                                ⚠ {g.dietary_notes}
+                              </span>
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                         {emptySeats > 0 && (
                           <p className="text-[10px] text-gray-400 italic pt-0.5">
                             {emptySeats} empty seat{emptySeats !== 1 ? "s" : ""}

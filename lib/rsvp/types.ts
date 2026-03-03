@@ -177,12 +177,15 @@ export interface RsvpToken {
 export interface PartyMember {
   name: string;
   label: string; // "Spouse" | "Child" | "Guest"
+  needs_highchair?: boolean;
 }
 
 export interface PartyMemberResponse {
   name: string;
   attending: "coming" | "not_coming" | "unsure";
   meal_preference?: string | null;
+  dietary_notes?: string | null;
+  needs_highchair?: boolean;
 }
 
 export interface RsvpResponse {
