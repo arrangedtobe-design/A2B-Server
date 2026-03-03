@@ -2,13 +2,29 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 interface PartyMember {
   name: string;
   label: string;
   needs_highchair?: boolean;
+}
+
+interface CsvRow {
+  name: string;
+  email: string;
+  rsvp_status: string;
+  meal_preference: string;
+  party_of: string;
+  party_label: string;
+  needs_highchair: string;
+  dietary_notes: string;
+}
+
+interface CsvError {
+  row: number;
+  message: string;
 }
 
 export default function GuestList({ userId }: { userId: string }) {
@@ -30,6 +46,11 @@ export default function GuestList({ userId }: { userId: string }) {
   const [editPartyMembers, setEditPartyMembers] = useState<PartyMember[]>([]);
   const [selectedGuests, setSelectedGuests] = useState<Set<string>>(new Set());
   const [mealOptions, setMealOptions] = useState<string[]>([]);
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<{ rows: CsvRow[]; errors: CsvError[] } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
   const router = useRouter();
@@ -351,6 +372,211 @@ export default function GuestList({ userId }: { userId: string }) {
     return count;
   };
 
+  // --- CSV helpers ---
+
+  const CSV_HEADERS = ["name", "email", "rsvp_status", "meal_preference", "party_of", "party_label", "needs_highchair", "dietary_notes"];
+  const VALID_STATUSES = ["pending", "confirmed", "declined"];
+
+  const escapeCsvField = (value: string): string => {
+    if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return `"${value}"`;
+  };
+
+  const downloadTemplate = () => {
+    const rows = [
+      CSV_HEADERS.join(","),
+      '"James Thompson","james@email.com","pending","","","","",""',
+      '"Linda Thompson","","pending","","James Thompson","Spouse","",""',
+    ];
+    triggerCsvDownload(rows.join("\n"), "guest-list-template.csv");
+  };
+
+  const exportGuestList = () => {
+    const rows: string[] = [CSV_HEADERS.join(",")];
+    for (const guest of guests) {
+      const response = rsvpResponses[guest.id];
+      rows.push([
+        escapeCsvField(guest.name || ""),
+        escapeCsvField(guest.email || ""),
+        escapeCsvField(guest.rsvp_status || "pending"),
+        escapeCsvField(guest.meal_preference || ""),
+        escapeCsvField(""),
+        escapeCsvField(""),
+        escapeCsvField(""),
+        escapeCsvField(response?.dietary_notes || ""),
+      ].join(","));
+
+      const members: PartyMember[] = guest.party_members || [];
+      members.forEach((member, i) => {
+        const partyResponse = response?.party_responses?.[i];
+        rows.push([
+          escapeCsvField(member.name || ""),
+          escapeCsvField(""),
+          escapeCsvField(guest.rsvp_status || "pending"),
+          escapeCsvField(partyResponse?.meal_preference || ""),
+          escapeCsvField(guest.name || ""),
+          escapeCsvField(member.label || "Guest"),
+          escapeCsvField(member.needs_highchair ? "yes" : ""),
+          escapeCsvField(partyResponse?.dietary_notes || ""),
+        ].join(","));
+      });
+    }
+    triggerCsvDownload(rows.join("\n"), "guest-list.csv");
+  };
+
+  const triggerCsvDownload = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseCsvContent = (text: string): { rows: CsvRow[]; errors: CsvError[] } => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return { rows: [], errors: [{ row: 0, message: "CSV file is empty or has no data rows" }] };
+
+    // Parse header
+    const headerLine = parseCsvLine(lines[0]);
+    const headerMap: Record<string, number> = {};
+    headerLine.forEach((h, i) => { headerMap[h.trim().toLowerCase()] = i; });
+
+    // Validate required headers
+    if (headerMap["name"] === undefined) {
+      return { rows: [], errors: [{ row: 0, message: 'Missing required "name" column header' }] };
+    }
+
+    const rows: CsvRow[] = [];
+    const errors: CsvError[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const fields = parseCsvLine(lines[i]);
+      const get = (col: string) => (headerMap[col] !== undefined ? (fields[headerMap[col]] || "").trim() : "");
+
+      const row: CsvRow = {
+        name: get("name"),
+        email: get("email"),
+        rsvp_status: get("rsvp_status") || "pending",
+        meal_preference: get("meal_preference"),
+        party_of: get("party_of"),
+        party_label: get("party_label"),
+        needs_highchair: get("needs_highchair"),
+        dietary_notes: get("dietary_notes"),
+      };
+
+      if (!row.name) {
+        errors.push({ row: i + 1, message: "Missing name" });
+      }
+      if (row.rsvp_status && !VALID_STATUSES.includes(row.rsvp_status)) {
+        errors.push({ row: i + 1, message: `Invalid rsvp_status "${row.rsvp_status}"` });
+      }
+
+      rows.push(row);
+    }
+
+    return { rows, errors };
+  };
+
+  const parseCsvLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          fields.push(current);
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+    }
+    fields.push(current);
+    return fields;
+  };
+
+  const handleFileSelect = async (file: File) => {
+    setCsvFile(file);
+    const text = await file.text();
+    const result = parseCsvContent(text);
+    setCsvPreview(result);
+  };
+
+  const handleImport = async () => {
+    if (!csvPreview || !eventId) return;
+    const { rows, errors } = csvPreview;
+    const blockingErrors = errors.filter((e) => e.message === "Missing name" || e.message.startsWith("Invalid rsvp_status"));
+    if (blockingErrors.length > 0) return;
+
+    setImporting(true);
+    try {
+      // Separate primary guests from party members
+      const primaryRows = rows.filter((r) => !r.party_of);
+      const memberRows = rows.filter((r) => r.party_of);
+
+      // Build a set of existing guest names for dedup
+      const existingNames = new Set(guests.map((g) => g.name.toLowerCase()));
+
+      // Group party members by their primary guest name
+      const membersByPrimary: Record<string, CsvRow[]> = {};
+      for (const m of memberRows) {
+        const key = m.party_of.toLowerCase();
+        if (!membersByPrimary[key]) membersByPrimary[key] = [];
+        membersByPrimary[key].push(m);
+      }
+
+      let importedCount = 0;
+      for (const primary of primaryRows) {
+        if (existingNames.has(primary.name.toLowerCase())) continue;
+
+        const partyKey = primary.name.toLowerCase();
+        const members = (membersByPrimary[partyKey] || []).map((m) => ({
+          name: m.name,
+          label: m.party_label || "Guest",
+          needs_highchair: m.needs_highchair?.toLowerCase() === "yes",
+        }));
+
+        const { error } = await supabase.from("guests").insert({
+          name: primary.name,
+          email: primary.email || null,
+          rsvp_status: primary.rsvp_status || "pending",
+          meal_preference: primary.meal_preference || null,
+          event_id: eventId,
+          party_members: members.length > 0 ? members : [],
+        });
+
+        if (!error) importedCount++;
+      }
+
+      // Reset import state
+      setCsvFile(null);
+      setCsvPreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setShowImportExport(false);
+      fetchGuests(eventId);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   }
@@ -391,6 +617,12 @@ export default function GuestList({ userId }: { userId: string }) {
             <h1 className="text-2xl font-bold text-heading truncate">Guest List</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowImportExport(true)}
+              className="px-3 py-1 rounded-full text-sm bg-surface text-rose-app border border-rose-app hover:bg-rose-light-bg"
+            >
+              Import / Export
+            </button>
             <ThemeSwitcher />
           </div>
         </div>
@@ -940,6 +1172,168 @@ export default function GuestList({ userId }: { userId: string }) {
                 ? "Sending..."
                 : `Resend to Selected (${selectedGuests.size})`}
             </button>
+          </div>
+        )}
+
+        {/* Import / Export Modal */}
+        {showImportExport && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div
+              className="w-full max-w-lg p-6 rounded-xl shadow-xl border border-app-border bg-surface max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-xl font-bold text-heading">Import / Export Guest List</h3>
+                <button
+                  onClick={() => {
+                    setShowImportExport(false);
+                    setCsvFile(null);
+                    setCsvPreview(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="text-subtle hover:text-heading text-2xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Download Template */}
+              <div className="mb-4">
+                <button
+                  onClick={downloadTemplate}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-app-border bg-page-bg hover:bg-surface transition-colors"
+                >
+                  <span className="font-medium text-heading text-sm">Download Template</span>
+                  <p className="text-xs text-subtle mt-0.5">Get a blank CSV with headers and example rows to fill in.</p>
+                </button>
+              </div>
+
+              {/* Export Guest List */}
+              <div className="mb-5">
+                <button
+                  onClick={exportGuestList}
+                  disabled={guests.length === 0}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-app-border bg-page-bg hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="font-medium text-heading text-sm">Export Guest List</span>
+                  <p className="text-xs text-subtle mt-0.5">
+                    Download your current guest list as a CSV file{guests.length > 0 ? ` (${guests.length} guests)` : ""}.
+                  </p>
+                </button>
+              </div>
+
+              {/* Import from CSV */}
+              <div className="border-t border-app-border pt-4">
+                <p className="text-sm font-medium text-heading mb-3">Import from CSV</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileSelect(file);
+                  }}
+                  className="block w-full text-sm text-body file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-app-border file:text-sm file:font-medium file:bg-page-bg file:text-heading hover:file:bg-surface file:cursor-pointer"
+                />
+
+                {/* Preview table */}
+                {csvPreview && (
+                  <div className="mt-4">
+                    {csvPreview.errors.length > 0 && (
+                      <div className="mb-3 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                        <p className="text-xs font-medium text-red-700 dark:text-red-400 mb-1">
+                          {csvPreview.errors.length} issue{csvPreview.errors.length > 1 ? "s" : ""} found:
+                        </p>
+                        {csvPreview.errors.map((err, i) => (
+                          <p key={i} className="text-xs text-red-600 dark:text-red-400">
+                            Row {err.row}: {err.message}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="overflow-x-auto border border-app-border rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-page-bg">
+                            <th className="px-2 py-1.5 text-left font-medium text-subtle">#</th>
+                            <th className="px-2 py-1.5 text-left font-medium text-subtle">Name</th>
+                            <th className="px-2 py-1.5 text-left font-medium text-subtle">Email</th>
+                            <th className="px-2 py-1.5 text-left font-medium text-subtle">Status</th>
+                            <th className="px-2 py-1.5 text-left font-medium text-subtle">Party Of</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {csvPreview.rows.map((row, i) => {
+                            const rowErrors = csvPreview.errors.filter((e) => e.row === i + 2);
+                            const hasError = rowErrors.length > 0;
+                            const isDuplicate = !row.party_of && guests.some((g) => g.name.toLowerCase() === row.name.toLowerCase());
+                            return (
+                              <tr
+                                key={i}
+                                className={`border-t border-app-border ${
+                                  hasError
+                                    ? "bg-red-50 dark:bg-red-900/10"
+                                    : isDuplicate
+                                    ? "bg-yellow-50 dark:bg-yellow-900/10"
+                                    : ""
+                                }`}
+                              >
+                                <td className="px-2 py-1.5 text-subtle">{i + 1}</td>
+                                <td className="px-2 py-1.5 text-heading">
+                                  {row.name || <span className="text-red-500 italic">missing</span>}
+                                  {row.party_of && (
+                                    <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                      {row.party_label || "Member"}
+                                    </span>
+                                  )}
+                                  {isDuplicate && (
+                                    <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                      exists
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-body">{row.email}</td>
+                                <td className="px-2 py-1.5 text-body">{row.rsvp_status}</td>
+                                <td className="px-2 py-1.5 text-body">{row.party_of}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4">
+                      <p className="text-xs text-subtle">
+                        {csvPreview.rows.filter((r) => !r.party_of).length} primary guest{csvPreview.rows.filter((r) => !r.party_of).length !== 1 ? "s" : ""},
+                        {" "}{csvPreview.rows.filter((r) => r.party_of).length} party member{csvPreview.rows.filter((r) => r.party_of).length !== 1 ? "s" : ""}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setCsvFile(null);
+                            setCsvPreview(null);
+                            if (fileInputRef.current) fileInputRef.current.value = "";
+                          }}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-app-border text-body hover:bg-page-bg"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleImport}
+                          disabled={importing || csvPreview.errors.some((e) => e.message === "Missing name" || e.message.startsWith("Invalid rsvp_status"))}
+                          className="px-3 py-1.5 text-sm rounded-lg bg-rose-app text-white hover:bg-rose-app-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {importing
+                            ? "Importing..."
+                            : `Import ${csvPreview.rows.filter((r) => !r.party_of).length} Guests`}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
