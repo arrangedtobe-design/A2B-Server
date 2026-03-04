@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { GuestListPreview } from "./guest-list-preview";
 
 interface PartyMember {
   name: string;
@@ -49,6 +50,8 @@ export default function GuestList({ userId }: { userId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statsOpen, setStatsOpen] = useState(true);
   const [showImportExport, setShowImportExport] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [event, setEvent] = useState<{ name: string } | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<{ rows: CsvRow[]; errors: CsvError[] } | null>(null);
   const [importing, setImporting] = useState(false);
@@ -66,6 +69,10 @@ export default function GuestList({ userId }: { userId: string }) {
     }
     setEventId(eid);
     fetchGuests(eid);
+    // Fetch event name once (separate from guest data refresh)
+    supabase.from("events").select("name").eq("id", eid).single().then(({ data }) => {
+      if (data) setEvent(data);
+    });
   }, []);
 
   // Clear selection and reset page on filter or search change
@@ -80,7 +87,8 @@ export default function GuestList({ userId }: { userId: string }) {
         .from("guests")
         .select("*")
         .eq("event_id", eid)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .order("name", { ascending: true }),
       supabase
         .from("rsvp_tokens")
         .select("*")
@@ -152,14 +160,46 @@ export default function GuestList({ userId }: { userId: string }) {
 
   const updateRsvp = async (id: string, status: string) => {
     if (!eventId) return;
-    await supabase.from("guests").update({ rsvp_status: status }).eq("id", id);
+    try {
+      const res = await fetch("/api/guests/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_guest", guest_id: id, updates: { rsvp_status: status } }),
+        keepalive: true,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("updateRsvp failed:", data.error);
+        return;
+      }
+    } catch (e) {
+      console.error("updateRsvp failed:", e);
+      return;
+    }
     fetchGuests(eventId);
   };
 
   const updateMeal = async (id: string, meal: string) => {
     if (!eventId) return;
-    await supabase.from("guests").update({ meal_preference: meal }).eq("id", id);
-    fetchGuests(eventId);
+    // Optimistic local update to avoid full refetch
+    setGuests((prev) => prev.map((g) => g.id === id ? { ...g, meal_preference: meal } : g));
+    try {
+      const res = await fetch("/api/guests/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_guest", guest_id: id, updates: { meal_preference: meal } }),
+        keepalive: true,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("updateMeal failed:", data.error);
+        // Revert on failure
+        fetchGuests(eventId);
+      }
+    } catch (e) {
+      console.error("updateMeal failed:", e);
+      fetchGuests(eventId);
+    }
   };
 
   const updatePartyResponse = async (
@@ -179,19 +219,27 @@ export default function GuestList({ userId }: { userId: string }) {
 
     current[index] = { ...current[index], ...updates };
 
-    if (existing) {
-      await supabase
-        .from("rsvp_responses")
-        .update({ party_responses: current, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-    } else {
-      // Create a response row so admin edits are persisted
-      await supabase.from("rsvp_responses").insert({
-        guest_id: guestId,
-        event_id: eventId,
-        attending: guest?.rsvp_status === "declined" ? "no" : "yes",
-        party_responses: current,
+    try {
+      const res = await fetch("/api/guests/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_party_response",
+          response_id: existing?.id || null,
+          guest_id: guestId,
+          event_id: eventId,
+          token_id: rsvpTokens[guestId]?.id || null,
+          party_responses: current,
+          attending: guest?.rsvp_status === "declined" ? "no" : "yes",
+        }),
+        keepalive: true,
       });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("updatePartyResponse failed:", data.error);
+      }
+    } catch (e) {
+      console.error("updatePartyResponse failed:", e);
     }
     fetchGuests(eventId);
   };
@@ -583,9 +631,38 @@ export default function GuestList({ userId }: { userId: string }) {
     return <div className="min-h-screen flex items-center justify-center text-subtle">Loading...</div>;
   }
 
-  const confirmed = guests.filter((g) => g.rsvp_status === "confirmed").length;
-  const pending = guests.filter((g) => g.rsvp_status === "pending").length;
-  const declined = guests.filter((g) => g.rsvp_status === "declined").length;
+  // Count all people (primary + party members) by status
+  const { confirmed, pending, declined, totalPeople } = (() => {
+    let conf = 0, pend = 0, dec = 0, total = 0;
+    for (const g of guests) {
+      const response = rsvpResponses[g.id];
+      const partyResponses: any[] = response?.party_responses || [];
+      const members = g.party_members || [];
+
+      // Count primary guest
+      total++;
+      if (g.rsvp_status === "confirmed") conf++;
+      else if (g.rsvp_status === "declined") dec++;
+      else pend++;
+
+      // Count party members
+      members.forEach((_: any, i: number) => {
+        total++;
+        if (g.rsvp_status === "declined") {
+          dec++;
+        } else if (g.rsvp_status === "confirmed") {
+          const pr = partyResponses[i];
+          const status = pr?.attending || "coming";
+          if (status === "coming") conf++;
+          else if (status === "not_coming") dec++;
+          else pend++; // unsure
+        } else {
+          pend++;
+        }
+      });
+    }
+    return { confirmed: conf, pending: pend, declined: dec, totalPeople: total };
+  })();
   const invited = guests.filter((g) => rsvpTokens[g.id]?.invite_sent_at).length;
   const responded = guests.filter((g) => rsvpTokens[g.id]?.responded_at).length;
   const estimatedTotal = getEstAttending();
@@ -630,6 +707,12 @@ export default function GuestList({ userId }: { userId: string }) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
+              onClick={() => setShowPreview(true)}
+              className="px-3 py-1 rounded-full text-sm bg-rose-app text-white hover:bg-rose-app-hover"
+            >
+              Preview
+            </button>
+            <button
               onClick={() => setShowImportExport(true)}
               className="px-3 py-1 rounded-full text-sm bg-surface text-rose-app border border-rose-app hover:bg-rose-light-bg"
             >
@@ -650,33 +733,33 @@ export default function GuestList({ userId }: { userId: string }) {
           {statsOpen && (
             <>
               <div className="grid grid-cols-4 gap-3 mb-3">
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-                  <p className="text-2xl font-bold text-heading">{guests.length}</p>
+                <div className="bg-gray-50 dark:bg-gray-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-heading">{totalPeople}</p>
                   <p className="text-xs text-subtle">Total</p>
                 </div>
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
                   <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{invited}</p>
                   <p className="text-xs text-subtle">Invited</p>
                 </div>
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
                   <p className="text-2xl font-bold text-green-600 dark:text-green-400">{confirmed}</p>
                   <p className="text-xs text-subtle">Confirmed</p>
                 </div>
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                <div className="bg-yellow-50 dark:bg-yellow-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
                   <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{pending}</p>
                   <p className="text-xs text-subtle">Pending</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                <div className="bg-red-50 dark:bg-red-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400">{declined}</p>
                   <p className="text-xs text-subtle">Declined</p>
                 </div>
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
                   <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{responded}</p>
                   <p className="text-xs text-subtle">Responded</p>
                 </div>
-                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                <div className="bg-rose-50 dark:bg-rose-900/30 p-3 rounded-lg shadow-sm border border-app-border text-center">
                   <p className="text-2xl font-bold text-rose-app">{estimatedTotal}</p>
                   <p className="text-xs text-subtle">Est. Attending</p>
                 </div>
@@ -730,15 +813,17 @@ export default function GuestList({ userId }: { userId: string }) {
                     placeholder="Name (optional)"
                     className="flex-1 border border-app-border rounded px-2 py-1.5 text-sm bg-surface text-heading"
                   />
-                  <label className="flex items-center gap-1 text-xs text-subtle whitespace-nowrap cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={member.needs_highchair || false}
-                      onChange={(e) => updatePartyMember(index, { needs_highchair: e.target.checked })}
-                      className="w-3 h-3 rounded"
-                    />
-                    Highchair
-                  </label>
+                  {member.label === "Child" && (
+                    <label className="flex items-center gap-1 text-xs text-subtle whitespace-nowrap cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={member.needs_highchair || false}
+                        onChange={(e) => updatePartyMember(index, { needs_highchair: e.target.checked })}
+                        className="w-3 h-3 rounded"
+                      />
+                      Highchair
+                    </label>
+                  )}
                   <button
                     type="button"
                     onClick={() => removePartyMember(index)}
@@ -773,13 +858,24 @@ export default function GuestList({ userId }: { userId: string }) {
         </div>
 
         {/* Search */}
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search guests..."
-          className="w-full border border-app-border rounded-lg px-3 py-2 mb-3 bg-surface text-heading text-sm placeholder:text-subtle"
-        />
+        <div className="relative mb-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search guests..."
+            className="w-full border border-app-border rounded-lg px-3 py-2 pr-8 bg-surface text-heading text-sm placeholder:text-subtle"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-subtle hover:text-heading text-lg leading-none"
+            >
+              &times;
+            </button>
+          )}
+        </div>
 
         {/* RSVP Filters */}
         <div className="flex gap-2 mb-4 flex-wrap">
@@ -898,19 +994,21 @@ export default function GuestList({ userId }: { userId: string }) {
                                 placeholder="Name"
                                 className="flex-1 border border-app-border rounded px-1.5 py-1 text-xs bg-surface text-heading"
                               />
-                              <label className="flex items-center gap-1 text-[11px] text-subtle whitespace-nowrap cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={member.needs_highchair || false}
-                                  onChange={(e) => {
-                                    setEditPartyMembers((prev) =>
-                                      prev.map((m, i) => (i === index ? { ...m, needs_highchair: e.target.checked } : m)),
-                                    );
-                                  }}
-                                  className="w-3 h-3 rounded"
-                                />
-                                Highchair
-                              </label>
+                              {member.label === "Child" && (
+                                <label className="flex items-center gap-1 text-[11px] text-subtle whitespace-nowrap cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={member.needs_highchair || false}
+                                    onChange={(e) => {
+                                      setEditPartyMembers((prev) =>
+                                        prev.map((m, i) => (i === index ? { ...m, needs_highchair: e.target.checked } : m)),
+                                      );
+                                    }}
+                                    className="w-3 h-3 rounded"
+                                  />
+                                  Highchair
+                                </label>
+                              )}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -976,19 +1074,19 @@ export default function GuestList({ userId }: { userId: string }) {
                       <select
                         value={guest.rsvp_status}
                         onChange={(e) => updateRsvp(guest.id, e.target.value)}
-                        className={`text-xs border rounded px-2 py-1 ${
+                        className={`text-xs border border-app-border rounded px-2 py-1 text-black dark:text-white [&>option]:bg-white [&>option]:dark:bg-gray-800 ${
                           guest.rsvp_status === "confirmed"
-                            ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            ? "bg-green-100 dark:bg-green-900/40"
                             : guest.rsvp_status === "declined"
-                            ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                            : "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                            ? "bg-red-100 dark:bg-red-900/40"
+                            : "bg-yellow-100 dark:bg-yellow-900/40"
                         }`}
                       >
                         <option value="pending">Pending</option>
                         <option value="confirmed">Confirmed</option>
                         <option value="declined">Declined</option>
                       </select>
-                      {guest.rsvp_status !== "declined" && (
+                      {guest.rsvp_status === "confirmed" && (
                         mealOptions.length > 0 ? (
                           <select
                             value={guest.meal_preference || ""}
@@ -1003,8 +1101,12 @@ export default function GuestList({ userId }: { userId: string }) {
                         ) : (
                           <input
                             type="text"
-                            value={guest.meal_preference || ""}
-                            onChange={(e) => updateMeal(guest.id, e.target.value)}
+                            key={`meal-primary-${guest.id}-${guest.meal_preference || ""}`}
+                            defaultValue={guest.meal_preference || ""}
+                            onBlur={(e) => {
+                              if (e.target.value !== (guest.meal_preference || ""))
+                                updateMeal(guest.id, e.target.value);
+                            }}
                             placeholder="Meal preference"
                             className="text-xs border border-app-border rounded px-2 py-1 flex-1 bg-surface text-heading"
                           />
@@ -1064,22 +1166,25 @@ export default function GuestList({ userId }: { userId: string }) {
                           {partyData.map((pr: any, i: number) => (
                             <div key={i} className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-body">{pr.name || guest.party_members[i]?.name || "Unnamed"}</span>
+                              {guest.party_members[i]?.label && (
+                                <span className="text-[10px] text-subtle">({guest.party_members[i].label})</span>
+                              )}
                               <select
                                 value={pr.attending || "coming"}
                                 onChange={(e) => updatePartyResponse(guest.id, i, { attending: e.target.value })}
-                                className={`text-[11px] border rounded px-1.5 py-0.5 ${
-                                  pr.attending === "coming"
-                                    ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                    : pr.attending === "unsure"
-                                      ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                      : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                className={`text-[11px] border border-app-border rounded px-1.5 py-0.5 text-black dark:text-white [&>option]:bg-white [&>option]:dark:bg-gray-800 ${
+                                  (pr.attending || "coming") === "coming"
+                                    ? "bg-green-100 dark:bg-green-900/40"
+                                    : pr.attending === "not_coming"
+                                    ? "bg-red-100 dark:bg-red-900/40"
+                                    : "bg-yellow-100 dark:bg-yellow-900/40"
                                 }`}
                               >
                                 <option value="coming">Coming</option>
                                 <option value="not_coming">Not Coming</option>
                                 <option value="unsure">Unsure</option>
                               </select>
-                              {pr.attending === "coming" && (
+                              {pr.attending === "coming" && guest.party_members[i]?.label !== "Child" && !pr.needs_highchair && (
                                 mealOptions.length > 0 ? (
                                   <select
                                     value={pr.meal_preference || ""}
@@ -1094,29 +1199,43 @@ export default function GuestList({ userId }: { userId: string }) {
                                 ) : (
                                   <input
                                     type="text"
-                                    value={pr.meal_preference || ""}
-                                    onChange={(e) => updatePartyResponse(guest.id, i, { meal_preference: e.target.value })}
+                                    key={`meal-${guest.id}-${i}-${pr.meal_preference || ""}`}
+                                    defaultValue={pr.meal_preference || ""}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== (pr.meal_preference || ""))
+                                        updatePartyResponse(guest.id, i, { meal_preference: e.target.value });
+                                    }}
                                     placeholder="Meal"
                                     className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading w-24"
                                   />
                                 )
                               )}
-                              <input
-                                type="text"
-                                value={pr.dietary_notes || ""}
-                                onChange={(e) => updatePartyResponse(guest.id, i, { dietary_notes: e.target.value })}
-                                placeholder="Dietary"
-                                className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading w-24"
-                              />
-                              <label className="flex items-center gap-1 text-[11px] text-subtle whitespace-nowrap cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={pr.needs_highchair || false}
-                                  onChange={(e) => updatePartyResponse(guest.id, i, { needs_highchair: e.target.checked })}
-                                  className="w-3 h-3 rounded"
-                                />
-                                Highchair
-                              </label>
+                              {pr.attending === "coming" && (
+                                <>
+                                  <input
+                                    type="text"
+                                    key={`dietary-${guest.id}-${i}-${pr.dietary_notes || ""}`}
+                                    defaultValue={pr.dietary_notes || ""}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== (pr.dietary_notes || ""))
+                                        updatePartyResponse(guest.id, i, { dietary_notes: e.target.value });
+                                    }}
+                                    placeholder="Dietary"
+                                    className="text-[11px] border border-app-border rounded px-1.5 py-0.5 bg-surface text-heading w-24"
+                                  />
+                                  {guest.party_members[i]?.label === "Child" && (
+                                    <label className="flex items-center gap-1 text-[11px] text-subtle whitespace-nowrap cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={pr.needs_highchair || false}
+                                        onChange={(e) => updatePartyResponse(guest.id, i, { needs_highchair: e.target.checked })}
+                                        className="w-3 h-3 rounded"
+                                      />
+                                      Highchair
+                                    </label>
+                                  )}
+                                </>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1206,6 +1325,18 @@ export default function GuestList({ userId }: { userId: string }) {
                 : `Resend to Selected (${selectedGuests.size})`}
             </button>
           </div>
+        )}
+
+        {/* Guest List Preview Modal */}
+        {showPreview && (
+          <GuestListPreview
+            guests={guests}
+            rsvpResponses={rsvpResponses}
+            rsvpTokens={rsvpTokens}
+            event={event}
+            mealOptions={mealOptions}
+            onClose={() => setShowPreview(false)}
+          />
         )}
 
         {/* Import / Export Modal */}

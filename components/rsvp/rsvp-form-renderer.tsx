@@ -94,7 +94,8 @@ export function RsvpFormRenderer({
             );
             return;
           }
-          if (pr.attending === "coming" && hasMealOptions && !pr.meal_preference) {
+          const isChild = partyMembers[i]?.label === "Child" || pr.needs_highchair;
+          if (pr.attending === "coming" && hasMealOptions && !pr.meal_preference && !isChild) {
             setError(
               `Please select a meal for ${pr.name || partyMembers[i]?.label || "guest"}.`,
             );
@@ -359,52 +360,59 @@ export function RsvpFormRenderer({
                           }}
                         />
                       </div>
-                      <select
-                        value={pr.attending}
-                        onChange={(e) =>
-                          updatePartyMember(index, {
-                            attending: e.target.value as "coming" | "not_coming" | "unsure",
-                            ...(e.target.value !== "coming" ? { meal_preference: null } : {}),
-                          })
-                        }
-                        style={{
-                          ...inputStyle,
-                          padding: "6px 10px",
-                          fontSize: "13px",
-                        }}
-                      >
-                        <option value="coming">Coming</option>
-                        <option value="not_coming">Not Coming</option>
-                        <option value="unsure">Unsure</option>
-                      </select>
-                      {pr.attending === "coming" &&
-                        formConfig.showMealPreference &&
-                        formConfig.mealOptions.length > 0 && (
-                          <select
-                            value={pr.meal_preference || ""}
-                            onChange={(e) =>
-                              updatePartyMember(index, {
-                                meal_preference: e.target.value || null,
-                              })
-                            }
-                            className="mt-2"
-                            style={{
-                              ...inputStyle,
-                              padding: "6px 10px",
-                              fontSize: "13px",
-                              ...(!pr.meal_preference
-                                ? { borderColor: theme.colors.accent }
-                                : {}),
-                            }}
-                          >
-                            <option value="">Select meal *</option>
-                            {formConfig.mealOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                      <div className="flex gap-2">
+                        <select
+                          value={pr.attending}
+                          onChange={(e) =>
+                            updatePartyMember(index, {
+                              attending: e.target.value as "coming" | "not_coming" | "unsure",
+                              ...(e.target.value !== "coming" ? { meal_preference: null } : {}),
+                            })
+                          }
+                          style={{
+                            ...inputStyle,
+                            padding: "6px 10px",
+                            fontSize: "13px",
+                            width: "auto",
+                            flex: "none",
+                          }}
+                        >
+                          <option value="coming">Coming</option>
+                          <option value="not_coming">Not Coming</option>
+                          <option value="unsure">Unsure</option>
+                        </select>
+                        {pr.attending === "coming" &&
+                          formConfig.showMealPreference &&
+                          formConfig.mealOptions.length > 0 &&
+                          member?.label !== "Child" &&
+                          !pr.needs_highchair && (
+                            <select
+                              value={pr.meal_preference || ""}
+                              onChange={(e) =>
+                                updatePartyMember(index, {
+                                  meal_preference: e.target.value || null,
+                                })
+                              }
+                              style={{
+                                ...inputStyle,
+                                padding: "6px 10px",
+                                fontSize: "13px",
+                                flex: "1",
+                                minWidth: 0,
+                                ...(!pr.meal_preference
+                                  ? { borderColor: theme.colors.accent }
+                                  : {}),
+                              }}
+                            >
+                              <option value="">Select meal *</option>
+                              {formConfig.mealOptions.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                      </div>
                       {pr.attending === "coming" && formConfig.showDietaryNotes && (
                         <input
                           type="text"
@@ -423,7 +431,7 @@ export function RsvpFormRenderer({
                           }}
                         />
                       )}
-                      {pr.attending === "coming" && (
+                      {pr.attending === "coming" && member?.label === "Child" && (
                         <label
                           className="flex items-center gap-2 mt-2 cursor-pointer"
                           style={{ fontSize: "13px", color: theme.colors.text }}

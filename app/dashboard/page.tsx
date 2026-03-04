@@ -60,22 +60,48 @@ export default function Dashboard() {
       setMembers(allMembers || []);
 
       // Fetch stats in parallel
-      const [guestsRes, tasksRes, budgetRes, vendorsRes] = await Promise.all([
-        supabase.from("guests").select("rsvp_status").eq("event_id", eventId),
+      const [guestsRes, responsesRes, tasksRes, budgetRes, vendorsRes] = await Promise.all([
+        supabase.from("guests").select("id, rsvp_status, party_members").eq("event_id", eventId),
+        supabase.from("rsvp_responses").select("guest_id, party_responses").eq("event_id", eventId),
         supabase.from("tasks").select("is_complete").eq("event_id", eventId),
         supabase.from("budget_items").select("estimated_cost, actual_cost").eq("event_id", eventId),
         supabase.from("vendors").select("id").eq("event_id", eventId),
       ]);
 
       const guestsList = guestsRes.data || [];
+      const responsesByGuest: Record<string, any> = {};
+      for (const r of responsesRes.data || []) {
+        responsesByGuest[r.guest_id] = r;
+      }
       const tasksList = tasksRes.data || [];
       const budgetList = budgetRes.data || [];
 
+      // Count all people (primary + party members) by status
+      let total = 0, conf = 0, pend = 0, dec = 0;
+      for (const g of guestsList) {
+        const partyResponses: any[] = responsesByGuest[g.id]?.party_responses || [];
+        const members = g.party_members || [];
+        total++;
+        if (g.rsvp_status === "confirmed") conf++;
+        else if (g.rsvp_status === "declined") dec++;
+        else pend++;
+        members.forEach((_: any, i: number) => {
+          total++;
+          if (g.rsvp_status === "declined") { dec++; }
+          else if (g.rsvp_status === "confirmed") {
+            const status = partyResponses[i]?.attending || "coming";
+            if (status === "coming") conf++;
+            else if (status === "not_coming") dec++;
+            else pend++;
+          } else { pend++; }
+        });
+      }
+
       setStats({
-        guestsTotal: guestsList.length,
-        confirmed: guestsList.filter((g: any) => g.rsvp_status === "confirmed").length,
-        pending: guestsList.filter((g: any) => g.rsvp_status === "pending").length,
-        declined: guestsList.filter((g: any) => g.rsvp_status === "declined").length,
+        guestsTotal: total,
+        confirmed: conf,
+        pending: pend,
+        declined: dec,
         tasksTotal: tasksList.length,
         tasksDone: tasksList.filter((t: any) => t.is_complete).length,
         vendorsTotal: (vendorsRes.data || []).length,
