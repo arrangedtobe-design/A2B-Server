@@ -198,14 +198,14 @@ export function TimelinePreview({
                 <div className="text-center py-16 text-gray-400">No events to display.</div>
               ) : (
                 <div className="relative" style={{ height: totalHeight + "px" }}>
-                  {/* Hour lines — label + short tick, not full-width to avoid overlapping cards */}
+                  {/* Hour lines — full-width but behind opaque cards */}
                   {hourLabels.map(({ hour, label, top }) => (
-                    <div key={hour} className="absolute left-0" style={{ top: top + "px", width: `${EVENT_AREA_LEFT + 8}px` }}>
+                    <div key={hour} className="absolute left-0 right-0" style={{ top: top + "px", zIndex: 1 }}>
                       <div className="flex items-start">
                         <span className="text-[11px] font-semibold text-gray-500 w-[52px] text-right pr-2 -mt-2 shrink-0">
                           {label}
                         </span>
-                        <div className="w-2 border-t border-gray-300"></div>
+                        <div className="flex-1 border-t border-gray-200"></div>
                       </div>
                     </div>
                   ))}
@@ -238,7 +238,7 @@ export function TimelinePreview({
                       >
                         <div
                           className="h-full rounded-md border border-gray-300 overflow-hidden flex shadow-sm"
-                          style={{ borderLeftWidth: "4px", borderLeftColor: bgColor, backgroundColor: bgColor + "15" }}
+                          style={{ borderLeftWidth: "4px", borderLeftColor: bgColor, background: `linear-gradient(${bgColor}15, ${bgColor}15), #ffffff` }}
                         >
                           <div className="flex-1 px-2 py-1 overflow-hidden flex flex-col justify-center min-w-0">
                             {isTiny ? (
@@ -342,14 +342,14 @@ export function TimelinePreview({
 
                 return (
                   <div className="relative" style={{ height: vTotalHeight + "px" }}>
-                    {/* Hour lines — label + short tick */}
+                    {/* Hour lines — full-width but behind opaque cards */}
                     {vHourLabels.map(({ hour, label, top }) => (
-                      <div key={hour} className="absolute left-0" style={{ top: top + "px", width: `${EVENT_AREA_LEFT + 8}px` }}>
+                      <div key={hour} className="absolute left-0 right-0" style={{ top: top + "px", zIndex: 1 }}>
                         <div className="flex items-start">
                           <span className="text-[11px] font-semibold text-gray-500 w-[52px] text-right pr-2 -mt-2 shrink-0">
                             {label}
                           </span>
-                          <div className="w-2 border-t border-gray-300"></div>
+                          <div className="flex-1 border-t border-gray-200"></div>
                         </div>
                       </div>
                     ))}
@@ -411,7 +411,7 @@ export function TimelinePreview({
                         >
                           <div
                             className="h-full rounded-md border border-gray-300 overflow-hidden flex shadow-sm"
-                            style={{ borderLeftWidth: "4px", borderLeftColor: bgColor, backgroundColor: bgColor + "15" }}
+                            style={{ borderLeftWidth: "4px", borderLeftColor: bgColor, background: `linear-gradient(${bgColor}15, ${bgColor}15), #ffffff` }}
                           >
                             <div className="flex-1 px-2 py-1 overflow-hidden flex flex-col justify-center min-w-0">
                               {isTiny ? (

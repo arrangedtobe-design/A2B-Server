@@ -93,6 +93,7 @@ export default function TimelineView({ userId }: { userId: string }) {
   const lastBroadcastRef = useRef(0);
   const tabIdRef = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
   const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const trashRef = useRef<HTMLDivElement>(null);
   const atBoundaryRef = useRef(false);
   const boundaryNotifIdRef = useRef<string | null>(null);
   const dStartMinRef = useRef(0);
@@ -724,13 +725,13 @@ export default function TimelineView({ userId }: { userId: string }) {
             </div>
 
             <div className="mt-8 flex justify-center">
-              <button onClick={() => setShowTrash(!showTrash)}
+              <button onClick={() => { const opening = !showTrash; setShowTrash(opening); if (opening) setTimeout(() => trashRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
                 className={"flex items-center gap-2 px-4 py-2 rounded-lg text-sm " + (showTrash ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800" : "bg-page-bg text-subtle hover:bg-surface")}>
                 Trash {trashedItems.length > 0 && <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{trashedItems.length}</span>}
               </button>
             </div>
             {showTrash && (
-              <div className="mt-4 bg-surface rounded-lg shadow border border-app-border p-4">
+              <div ref={trashRef} className="mt-4 bg-surface rounded-lg shadow border border-app-border p-4">
                 <div className="flex justify-between items-center mb-3"><h3 className="font-semibold text-heading">Trash ({trashedItems.length})</h3>{trashedItems.length > 0 && <button onClick={emptyTrash} className="text-sm text-red-500 dark:text-red-400">Empty</button>}</div>
                 {trashedItems.length === 0 ? <p className="text-center text-subtle py-4">Empty</p> : (
                   <div className="space-y-2">{trashedItems.map(item => (

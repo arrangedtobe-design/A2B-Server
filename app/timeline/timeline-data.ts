@@ -85,9 +85,7 @@ export function layoutEvents(items: any[], dStartMin: number): LayoutItem[] {
       sweepEvents.push({ min: withPos[idx]._startMin, type: 0, idx }); // 0 = start
       sweepEvents.push({ min: withPos[idx]._endMin, type: 1, idx });   // 1 = end
     }
-    sweepEvents.sort((a, b) => a.min - b.min || a.type - b.type); // ends before starts at same time? No — starts first so we count peak
-    // Actually: at the same minute, starts should come before ends to count peak concurrency
-    // type 0 (start) < type 1 (end), so starts sort first — correct
+    sweepEvents.sort((a, b) => a.min - b.min || a.type - b.type); // starts before ends at same minute to count peak concurrency
 
     let totalCols = 1;
     const active = new Set<number>();
