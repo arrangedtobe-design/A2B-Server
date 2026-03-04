@@ -47,6 +47,7 @@ export default function GuestList({ userId }: { userId: string }) {
   const [selectedGuests, setSelectedGuests] = useState<Set<string>>(new Set());
   const [mealOptions, setMealOptions] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statsOpen, setStatsOpen] = useState(true);
   const [showImportExport, setShowImportExport] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<{ rows: CsvRow[]; errors: CsvError[] } | null>(null);
@@ -639,37 +640,49 @@ export default function GuestList({ userId }: { userId: string }) {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-3">
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-heading">{guests.length}</p>
-            <p className="text-xs text-subtle">Total</p>
-          </div>
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{invited}</p>
-            <p className="text-xs text-subtle">Invited</p>
-          </div>
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{confirmed}</p>
-            <p className="text-xs text-subtle">Confirmed</p>
-          </div>
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{pending}</p>
-            <p className="text-xs text-subtle">Pending</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{declined}</p>
-            <p className="text-xs text-subtle">Declined</p>
-          </div>
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{responded}</p>
-            <p className="text-xs text-subtle">Responded</p>
-          </div>
-          <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
-            <p className="text-2xl font-bold text-rose-app">{estimatedTotal}</p>
-            <p className="text-xs text-subtle">Est. Attending</p>
-          </div>
+        <div className="mb-6">
+          <button
+            onClick={() => setStatsOpen(!statsOpen)}
+            className="text-sm font-medium text-subtle hover:text-heading mb-2 flex items-center gap-1"
+          >
+            Overview {statsOpen ? "▾" : "▸"}
+          </button>
+          {statsOpen && (
+            <>
+              <div className="grid grid-cols-4 gap-3 mb-3">
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-heading">{guests.length}</p>
+                  <p className="text-xs text-subtle">Total</p>
+                </div>
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{invited}</p>
+                  <p className="text-xs text-subtle">Invited</p>
+                </div>
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{confirmed}</p>
+                  <p className="text-xs text-subtle">Confirmed</p>
+                </div>
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{pending}</p>
+                  <p className="text-xs text-subtle">Pending</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{declined}</p>
+                  <p className="text-xs text-subtle">Declined</p>
+                </div>
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{responded}</p>
+                  <p className="text-xs text-subtle">Responded</p>
+                </div>
+                <div className="bg-surface p-3 rounded-lg shadow-sm border border-app-border text-center">
+                  <p className="text-2xl font-bold text-rose-app">{estimatedTotal}</p>
+                  <p className="text-xs text-subtle">Est. Attending</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Add Guest Form */}

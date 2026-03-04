@@ -690,17 +690,17 @@ export default function TimelineView({ userId }: { userId: string }) {
                         <div className="flex-1 px-2 py-1 overflow-hidden flex flex-col justify-center min-w-0">
                           {isCompact ? (
                             <div className="flex items-center gap-1 overflow-hidden">
-                              <span className="text-xs font-bold text-subtle shrink-0">{formatTime(item.start_time)}</span>
-                              <span className="font-semibold text-heading text-xs truncate">{item.title}</span>
-                              {vids.map(vid => <span key={vid} className="text-xs px-1 rounded shrink-0" style={{ backgroundColor: vendorColor(vid) + "50", fontSize: "10px" }}>{vendorName(vid)}</span>)}
+                              <span className="text-[11px] font-bold text-subtle shrink-0">{formatTime(item.start_time)} → {formatTime(endTime)}</span>
+                              <span className="font-semibold text-heading text-[12px] truncate">{item.title}</span>
+                              {vids.map(vid => <span key={vid} className="text-[10px] px-1 rounded shrink-0" style={{ backgroundColor: vendorColor(vid) + "50" }}>{vendorName(vid)}</span>)}
                             </div>
                           ) : (
                             <>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-bold text-subtle">{formatTime(item.start_time)} → {formatTime(endTime)}</span>
-                                <span className="text-xs text-subtle">{formatDuration(item.duration_minutes)}</span>
+                                <span className="text-[12px] font-bold text-subtle">{formatTime(item.start_time)} → {formatTime(endTime)}</span>
+                                <span className="text-[12px] text-subtle">{formatDuration(item.duration_minutes)}</span>
                               </div>
-                              <p className="font-semibold text-heading text-sm leading-tight truncate">{item.title}</p>
+                              <p className="font-semibold text-heading text-[13px] leading-tight truncate">{item.title}</p>
                               {item._height > 70 && (
                                 <div className="flex flex-wrap gap-1 mt-0.5">
                                   {item.location && <span className="text-xs text-subtle">• {item.location}</span>}
@@ -765,6 +765,7 @@ export default function TimelineView({ userId }: { userId: string }) {
             eventVendors={eventVendors}
             activeTl={activeTl}
             event={event}
+            eventId={eventId!}
             CATEGORY_COLORS={CATEGORY_COLORS}
             onClose={() => setShowPreview(false)}
           />

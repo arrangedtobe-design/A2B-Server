@@ -46,7 +46,7 @@ export function SeatingPreview({
   const fixtures = tables.filter((t) => isFixture(t.shape));
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/60">
+    <div data-print-target className="fixed inset-0 z-50 flex flex-col bg-black/60">
       {/* Toolbar — hidden when printing */}
       <div className="flex items-center justify-between px-6 py-3 bg-surface border-b border-app-border shrink-0 print:hidden">
         <h2 className="text-lg font-bold text-heading">Seating Chart Preview</h2>

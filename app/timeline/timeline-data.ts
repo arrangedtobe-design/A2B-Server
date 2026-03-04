@@ -85,7 +85,7 @@ export function layoutEvents(items: any[], dStartMin: number): LayoutItem[] {
       sweepEvents.push({ min: withPos[idx]._startMin, type: 0, idx }); // 0 = start
       sweepEvents.push({ min: withPos[idx]._endMin, type: 1, idx });   // 1 = end
     }
-    sweepEvents.sort((a, b) => a.min - b.min || a.type - b.type); // starts before ends at same minute to count peak concurrency
+    sweepEvents.sort((a, b) => a.min - b.min || b.type - a.type); // ends before starts at same minute — adjacent events aren't concurrent
 
     let totalCols = 1;
     const active = new Set<number>();

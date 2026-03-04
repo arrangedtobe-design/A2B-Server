@@ -468,10 +468,18 @@ export function CanvasTable({
 
       {/* Label above element when zoomed out too far */}
       {!textFitsInside && (() => {
-        // Distance from table center to topmost seat edge (canvas px)
+        // Account for rotation: compute visual extent above center in screen space
+        const rotRad = (table.rotation * Math.PI) / 180;
+        const sinR = Math.sin(rotRad);
+        const cosR = Math.cos(rotRad);
+        // Visual half-height of table body after rotation
+        const bodyAbove = Math.abs(dimensions.w / 2 * sinR) + Math.abs(dimensions.h / 2 * cosR);
         const maxUp = fixture
-          ? dimensions.h / 2
-          : Math.max(dimensions.h / 2, ...seatPositions.map((p) => -p.y + 14));
+          ? bodyAbove
+          : Math.max(
+              bodyAbove,
+              ...seatPositions.map((p) => -(p.x * sinR + p.y * cosR) + 14),
+            );
         // Add a small gap in canvas px
         const labelBottom = maxUp + 14;
         return (

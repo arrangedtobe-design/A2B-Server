@@ -113,7 +113,6 @@ export default function Dashboard() {
     { label: "Wedding Team", href: "/members", icon: "💍", description: "Manage your team" },
     { label: "RSVP Page", href: "/rsvp-editor", icon: "💌", description: "Design your RSVP" },
     { label: "Seating Chart", href: "/seating", icon: "🪑", description: "Arrange your tables" },
-    { label: "Settings", href: "/settings", icon: "⚙️", description: "Event details & preferences" },
   ];
 
   const canManageMembers = membership?.role === "owner" || membership?.role === "partner" || membership?.role === "planner";
@@ -121,18 +120,10 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-page-bg">
       <div className="max-w-2xl mx-auto p-6">
-        <div className="flex justify-between items-start mb-2">
-          <div>
-            <h1 className="text-3xl font-bold text-heading">{event.name}</h1>
-            <div className="flex gap-3 text-sm text-subtle mt-1">
-              {event.wedding_date && (
-                <span>{new Date(event.wedding_date + "T00:00:00").toLocaleDateString()}</span>
-              )}
-              {event.venue && <span>{event.venue}</span>}
-              <span>{membership?.role}</span>
-            </div>
-          </div>
-          <div className="flex gap-2 items-center">
+        <div className="flex justify-between items-center mb-2">
+          <h1 className="text-3xl font-bold text-heading truncate min-w-0">{event.name}</h1>
+          <div className="flex gap-2 items-center shrink-0">
+            <Link href="/settings" className="text-subtle hover:text-heading text-lg" title="Event Settings">⚙️</Link>
             <ThemeSwitcher />
             <button onClick={switchEvent} className="text-sm text-subtle hover:text-body">
               Switch
@@ -141,6 +132,13 @@ export default function Dashboard() {
               Sign Out
             </button>
           </div>
+        </div>
+        <div className="flex gap-3 text-sm text-subtle mb-2">
+          {event.wedding_date && (
+            <span>{new Date(event.wedding_date + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</span>
+          )}
+          {event.venue && <span>{event.venue}</span>}
+          <span>{membership?.role}</span>
         </div>
 
         <div className="mt-4 mb-4">

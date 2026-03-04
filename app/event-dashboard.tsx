@@ -145,7 +145,7 @@ export default function EventDashboard({ memberships, userId }: { memberships: a
                         <p className="font-semibold text-heading">{m.events.name}</p>
                         {m.events.wedding_date && (
                           <p className="text-sm text-subtle">
-                            {new Date(m.events.wedding_date + "T00:00:00").toLocaleDateString()}
+                            {new Date(m.events.wedding_date + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
                           </p>
                         )}
                         {m.events.venue && <p className="text-sm text-subtle">{m.events.venue}</p>}
