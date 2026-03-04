@@ -13,6 +13,7 @@ import {
   formatDateShort, formatDateLong,
   TEMPLATES, Template, LayoutItem,
 } from "./timeline-data";
+import { TimelinePreview } from "./timeline-preview";
 
 function TemplateSelector({ onSelect, onEmpty, onCancel, showCancel }: {
   onSelect: (t: Template) => void; onEmpty: () => void; onCancel?: () => void; showCancel: boolean;
@@ -68,6 +69,8 @@ export default function TimelineView({ userId }: { userId: string }) {
   const [showTrash, setShowTrash] = useState(false);
   const [showManager, setShowManager] = useState(false);
   const [filterCategory, setFilterCategory] = useState("All");
+  const [event, setEvent] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [undoItem, setUndoItem] = useState<any>(null);
   const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -108,7 +111,7 @@ export default function TimelineView({ userId }: { userId: string }) {
     const eid = localStorage.getItem("activeEventId");
     if (!eid) { router.push("/"); return; }
     setLoading(true); setShowNewTemplates(false);
-    setEventId(eid); fetchVendors(eid); fetchTimelines(eid);
+    setEventId(eid); fetchVendors(eid); fetchTimelines(eid); fetchEvent(eid);
   }, []);
 
   useEffect(() => {
@@ -179,6 +182,10 @@ export default function TimelineView({ userId }: { userId: string }) {
     };
   }, [eventId, activeTimelineId]);
 
+  const fetchEvent = async (eid: string) => {
+    const { data } = await supabase.from("events").select("id, name, wedding_date, venue").eq("id", eid).single();
+    if (data) setEvent(data);
+  };
   const fetchVendors = async (eid: string) => {
     const { data } = await supabase.from("vendors").select("*").eq("event_id", eid).order("name");
     setVendors(data || []);
@@ -577,6 +584,7 @@ export default function TimelineView({ userId }: { userId: string }) {
             <h1 className="text-2xl font-bold text-heading truncate">Wedding Day Timeline</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setShowPreview(true)} className="px-3 py-1.5 rounded-lg border border-app-border text-body hover:bg-page-bg text-sm">Preview</button>
             <ThemeSwitcher />
           </div>
         </div>
@@ -747,6 +755,18 @@ export default function TimelineView({ userId }: { userId: string }) {
             <span className="text-sm">"{undoItem.title}" trashed</span>
             <button onClick={undoTrash} className="text-rose-300 hover:text-rose-100 font-semibold text-sm">Undo</button>
           </div>
+        )}
+
+        {showPreview && (
+          <TimelinePreview
+            items={items}
+            vendors={vendors}
+            eventVendors={eventVendors}
+            activeTl={activeTl}
+            event={event}
+            CATEGORY_COLORS={CATEGORY_COLORS}
+            onClose={() => setShowPreview(false)}
+          />
         )}
       </div>
     </div>
